@@ -5,7 +5,7 @@ from random import shuffle
 import keras.utils
 from keras.models import Model
 from keras.layers import Reshape, BatchNormalization, Activation, MaxPooling2D, Conv2D, Dropout, GRU, Dense,\
-    Input, Flatten, Bidirectional, TimeDistributed
+    Input, Flatten, Bidirectional, TimeDistributed, GlobalAveragePooling1D
 
 class DCASE2018:
     NB_CLASS = 10
@@ -69,6 +69,7 @@ class DCASE2018:
 
         # extend dataset to have enough dim for conv2D
         self.trainingDataset["input"] = np.expand_dims(self.trainingDataset["input"], axis=-1)
+        self.validationDataset["input"] = np.expand_dims(self.validationDataset["input"], axis=-1)
 
     def __loadMeta(self):
         """ Load the metadata for all subset of the DCASE2018 task4 dataset"""
@@ -102,6 +103,7 @@ class DCASE2018:
                 output = [0] * DCASE2018.NB_CLASS
                 feature = np.load(path).T
 
+                # save the original shape of the data
                 if self.originalShape is None:
                     self.originalShape = feature.shape
                     print("original Shape: ", self.originalShape)
@@ -175,14 +177,17 @@ if __name__=='__main__':
     print(gru.shape)
 
     output = TimeDistributed(
-        Dense(dataset.nbClass, activation="sigmoid")
+        Dense(dataset.nbClass, activation="sigmoid"),
     )(gru)
+    print(output.shape)
+
+    output = GlobalAveragePooling1D()(output)
 
     model = Model(inputs=kInput, outputs=output)
     keras.utils.print_summary(model, line_length=100)
 
     # compile model
-    model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["binary_accuracy"])
+    model.compile(loss="categorical_crossentropy", optimizer="adam", metrics=["accuracy"])
 
     # fit
     model.fit(
