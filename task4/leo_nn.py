@@ -47,6 +47,7 @@ class DCASE2018:
 
         self.validationPercent = validationPercent
         self.nbClass = nbClass
+        self.originalShape = None
 
         # dataset that will be used
         self.nbSequence = nb_sequence
@@ -99,14 +100,11 @@ class DCASE2018:
             path = os.path.join(self.feat_train_weak, info[0] + ".npy")
             if os.path.isfile(path):
                 output = [0] * DCASE2018.NB_CLASS
-                feature = np.load(path)
+                feature = np.load(path).T
 
-                # if recurent network, reshape the data with the proper amount of sequence
-                if self.nbSequence > 1:
-                    currentShape = feature.shape
-                    nbElementBySequence = int(currentShape[1] / self.nbSequence)
-                    feature.resize((10, currentShape[0], nbElementBySequence))
-                    print(feature.shape)
+                if self.originalShape is None:
+                    self.originalShape = feature.shape
+                    print("original Shape: ", self.originalShape)
 
                 self.trainingDataset["input"].append(feature)
                 for cls in info[1].split(","): output[DCASE2018.class_correspondance[cls.rstrip()]] = 1
@@ -123,7 +121,9 @@ class DCASE2018:
             path = os.path.join(self.feat_train_weak, info[0] + ".npy")
             if os.path.isfile(path):
                 output = [0] * DCASE2018.NB_CLASS
-                self.validationDataset["input"].append(np.load(path))
+                feature = np.load(path).T
+
+                self.validationDataset["input"].append(feature)
                 for cls in info[1].split(","): output[DCASE2018.class_correspondance[cls.rstrip()]] = 1
                 self.validationDataset["output"].append(output)
             else:
@@ -132,14 +132,13 @@ class DCASE2018:
 
     def getInputShape(self):
         shape = self.trainingDataset["input"][0].shape
-        return (shape[0], shape[1], shape[2], 1)
+        return (shape[0], shape[1], 1)
 
 
 if __name__=='__main__':
     dataset = DCASE2018(
         meta_train_weak="meta/weak.csv",
-        feat_train_weak="/homeLocal/eriador/Documents/DCASE2018/task4/features/train/weak/mfcc",
-        nb_sequence=10
+        feat_train_weak="/homeLocal/eriador/Documents/DCASE2018/task4/features/train/weak/mel",
     )
 
     # ==================================================================================================================
@@ -147,33 +146,33 @@ if __name__=='__main__':
     # ==================================================================================================================
     kInput = Input(dataset.getInputShape())
 
-    block1 = Conv2D(filters=64, kernel_size=(3,3))(kInput)
+    block1 = Conv2D(filters=64, kernel_size=(3,3), padding="same")(kInput)
     block1 = BatchNormalization()(block1)
     block1 = Activation(activation="relu")(block1)
     block1 = MaxPooling2D(pool_size=(1, 4))(block1)
     block1 = Dropout(0.3)(block1)
 
-    block2 = Conv2D(filters=64, kernel_size=(3,3))(block1)
+    block2 = Conv2D(filters=64, kernel_size=(3,3), padding="same")(block1)
     block2 = BatchNormalization()(block2)
     block2 = Activation(activation="relu")(block2)
     block2 = MaxPooling2D(pool_size=(1, 4))(block2)
     block2 = Dropout(0.3)(block2)
 
-    block3 = Conv2D(filters=64, kernel_size=(3,3))(block2)
+    block3 = Conv2D(filters=64, kernel_size=(3,3), padding="same")(block2)
     block3 = BatchNormalization()(block3)
     block3 = Activation(activation="relu")(block3)
     block3 = MaxPooling2D(pool_size=(1, 4))(block3)
     block3 = Dropout(0.3)(block3)
     # block3 ndim = 4
 
-    targetShape = block3.shape[1] * block3.shape[2]
+    targetShape = dataset.originalShape[0]
     reshape = Reshape(target_shape=(targetShape, 64))(block3)
     # reshape ndim = 3
 
     gru = Bidirectional(
         GRU(kernel_initializer='glorot_uniform', recurrent_dropout=0.0, dropout=0.3, units=64, return_sequences=True)
     )(reshape)
-    # array with shape (1xxx, 10)
+    print(gru.shape)
 
     output = TimeDistributed(
         Dense(dataset.nbClass, activation="sigmoid")
