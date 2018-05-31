@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def File_MinMaxNormalization(data: np.array) -> np.array:
     """
     Perform a Min Max normalization on each file independently.
