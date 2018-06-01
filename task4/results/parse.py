@@ -32,22 +32,35 @@ if __name__=='__main__':
         if line[:9] == "%s/%s" % (maxi, maxi):
             epoch.append(line)
 
-    # get the interresting infomation
-    data = {"loss": [], "acc": [], "val_loss": [], "val_acc": [], "tra_f1": [], "val_f1": []}
+    # get the interesting information
+    data = {"loss": [], "val_loss": [], "acc": [], "val_acc": [],
+            "precision": [], "val_precision": [],
+            "recall": [], "val_recall": [],
+            "tra_f1": [], "val_f1": []
+            }
+
     for e in epoch:
         e = e.split(" ")
         data["loss"].append(float(e[7]))
         data["acc"].append(float(e[10]))
-        data["tra_f1"].append(float(e[13]))
-        data["val_loss"].append(float(e[16]))
-        data["val_acc"].append(float(e[19]))
-        data["val_f1"].append(float(e[22][:-1]))
+        data["precision"].append(float(e[13]))
+        data["recall"].append(float(e[16]))
+        data["tra_f1"].append(float(e[19]))
+        data["val_loss"].append(float(e[22]))
+        data["val_acc"].append(float(e[25]))
+        data["val_precision"].append(float(e[28]))
+        data["val_recall"].append(float(e[31]))
+        data["val_f1"].append(float(e[34][:-1]))
 
     # display
+    plt.figure(figsize=(16, 10))
     plt.subplot(111)
     plt.plot(data["val_loss"], label="val loss", color='C2', linewidth=1)
+    plt.plot(data["loss"], label="tra loss", color='C2', linewidth=1, alpha=0.5)
     plt.plot(data["val_acc"], label="val acc", color='C1', linewidth=1)
+    plt.plot(data["acc"], label="tra acc", color='C1', linewidth=1, alpha=0.5)
     plt.plot(data["val_f1"], label="val f1", color='C0', linewidth=1)
+    plt.plot(data["tra_f1"], label="tra f1", color='C0', linewidth=1, alpha=0.5)
 
     # print reference line
     plt.plot([0.72]*100, '--C0', label="baseline val f1 = 0.72", linewidth=1)
