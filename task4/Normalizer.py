@@ -41,10 +41,8 @@ def File_MeanNormalization(data: np.array) -> np.array:
 
     for d in data:
         mean = np.mean(d)
-        maxi = np.max(d)
-        mini = np.min(d)
 
-        result.append((d - mean) / (maxi - mini))
+        result.append(d - mean)
 
     return np.array(result)
 
@@ -55,10 +53,8 @@ def Global_MeanNormalization(data: np.array) -> np.array:
     :return: N-dimension array glovally normalized
     """
     mean = np.mean(data)
-    maxi = np.mean(data)
-    mini = np.min(data)
 
-    data = (data - mean) / (maxi - mini)
+    data = data - mean
 
     return data
 
