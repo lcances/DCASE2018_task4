@@ -1,0 +1,10 @@
+task4/audio/
+task4/features/
+*.sh
+a.py
+.idea/
+audio/
+features/
+meta/
+/results/baseline_categorical/
+/results/baseline/
