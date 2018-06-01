@@ -2,10 +2,9 @@ import keras.utils
 from keras.layers import Reshape, BatchNormalization, Activation, MaxPooling2D, Conv2D, Dropout, GRU, Dense, \
     Input, Bidirectional, TimeDistributed, GlobalAveragePooling1D
 from keras.models import Model
-from keras import backend as K
 
 import Normalizer
-import dcase_util
+import Metrics
 from datasetGenerator import DCASE2018
 
 
@@ -26,6 +25,7 @@ if __name__ == '__main__':
         if args.normalizer == "global_Mean": normalizer = Normalizer.Global_MeanNormalization
         if args.normalizer == "file_Standard": normalizer = Normalizer.File_Standardization
         if args.normalizer == "global_Standard": normalizer = Normalizer.Global_Stadardization
+        if args.normalizer == "unit": normalizer = Normalizer.UnitLength
 
     dataset = DCASE2018(
         meta_train_weak="meta/weak.csv",
@@ -76,98 +76,15 @@ if __name__ == '__main__':
     model = Model(inputs=kInput, outputs=output)
     keras.utils.print_summary(model, line_length=100)
 
-    # model hyper parameters
+    # ======== model hyper parameters ========
     epochs = 100
     metrics = "binary_accuracy"
     loss = "binary_crossentropy"
-    ProgressLoggerCallbackParam = {
-        "external_metric_labels": {
-            "val_macro_f_measure": "val_macro_f_measure",
-            "tra_macro_f_measure": "tra_macro_f_measure"
-        },
-        "manual_update": True,
-        "processing_interval": 1
-    }
-    StopperCallbacksParam = {
-        "manual_update": True,
-        "monitor": "val_macro_f_measure",
-        "initial_delay": 5,
-        "min_delta": 0.01,  # be careful, means 1%,
-        "patience": 15,
-        "external_metric_labels": {
-            "val_macro_f_measure": "val_macro_f_measure",
-            "tra_macro_f_measure": "tra_macro_f_measure"
-        }
-    }
-    StasherCallbacksParam = {
-        "manual_update": True,
-        "monitor": "val_macro_f_measure",
-        "initial_delay": 5,
-        "external_metric_labels": {
-            "val_macro_f_measure": "val_macro_f_measure",
-            "tra_macro_f_measure": "tra_macro_f_measure"
-        }
-    }
-
-    # f1 metrics
-
-    def f1(y_true, y_pred):
-        def recall(y_true, y_pred):
-            """Recall metric.
-
-            Only computes a batch-wise average of recall.
-
-            Computes the recall, a metric for multi-label classification of
-            how many relevant items are selected.
-            """
-            true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
-            possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
-            recall = true_positives / (possible_positives + K.epsilon())
-            return recall
-
-        def precision(y_true, y_pred):
-            """Precision metric.
-
-            Only computes a batch-wise average of precision.
-
-            Computes the precision, a metric for multi-label classification of
-            how many selected items are relevant.
-            """
-            true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
-            predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
-            precision = true_positives / (predicted_positives + K.epsilon())
-            return precision
-
-        precision = precision(y_true, y_pred)
-        recall = recall(y_true, y_pred)
-        return 2 * ((precision * recall) / (precision + recall + K.epsilon()))
-
 
     # compile model
     model.compile(loss=loss,
                   optimizer="adam",
-                  metrics=[metrics, f1])
-
-
-    # callbacks
-    ProgressLoggerCallback = dcase_util.keras.ProgressLoggerCallback(
-        epochs=epochs,
-        metric=metrics,
-        loss=loss,
-        output_type='logging',
-        **ProgressLoggerCallbackParam
-    )
-
-    StopperCallbacks = dcase_util.keras.StopperCallback(
-        epochs=epochs,
-        **StopperCallbacksParam
-
-    )
-
-    StasherCallbacks = dcase_util.keras.StasherCallback(
-        epochs=epochs,
-        **StasherCallbacksParam
-    )
+                  metrics=[metrics, Metrics.precision, Metrics.recall, Metrics.f1])
 
     # fit
     model.fit(
@@ -179,5 +96,5 @@ if __name__ == '__main__':
             dataset.validationDataset["input"],
             dataset.validationDataset["output"]
         ),
-        callbacks=[ProgressLoggerCallback, StopperCallbacks, StasherCallbacks]
+        callbacks=[],
     )

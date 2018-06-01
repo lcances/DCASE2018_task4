@@ -56,6 +56,7 @@ def Global_MeanNormalization(data: np.array) -> np.array:
 
     data = data - mean
 
+    np.linalg.norm()
     return data
 
 def File_Standardization(data: np.array) -> np.array:
@@ -75,6 +76,7 @@ def File_Standardization(data: np.array) -> np.array:
 
     return np.array(result)
 
+
 def Global_Stadardization(data: np.array) -> np.array:
     """
     Perform a standardization on the whole dataset
@@ -87,6 +89,11 @@ def Global_Stadardization(data: np.array) -> np.array:
     data = (data - mean) / var
 
     return data
+
+
+def UnitLength(data: np.array, order: int =None) -> np.array:
+    return data / np.linalg.norm(data, ord=order, axis=1)
+
 
 if __name__=='__main__':
     import random
