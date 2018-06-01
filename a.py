@@ -64,16 +64,22 @@ toParse = """Epoch     Train        Val          Train        Val          val_m
 
 val_macro = []
 val_loss = []
+val_binary_accuracy = []
 for line in toParse.split("\n")[2:]:
     data = " ".join(line.split()).split(" ")
+    print(data)
     val_macro.append(float(data[-3])/100.0)
     val_loss.append(float(data[3]))
+    val_binary_accuracy.append(float(data[5]))
 
 import matplotlib.pyplot as plt
 import numpy as np
 
+plt.figure(0, figsize=(9,6))
 plt.subplot(111)
-plt.plot(val_macro, label="val_macro")
+plt.plot(val_macro, label="val_f1")
 plt.plot(val_loss, label="val_loss")
+plt.plot(val_binary_accuracy, label="val_bin_acc")
+plt.title("Baseline run")
 plt.legend()
 plt.show()

@@ -1,3 +1,5 @@
+import os
+
 import keras.utils
 from keras.layers import Reshape, BatchNormalization, Activation, MaxPooling2D, Conv2D, Dropout, GRU, Dense, \
     Input, Bidirectional, TimeDistributed, GlobalAveragePooling1D
@@ -5,8 +7,8 @@ from keras.models import Model
 
 import Normalizer
 import Metrics
+import CallBacks
 from datasetGenerator import DCASE2018
-
 
 if __name__ == '__main__':
     import argparse
@@ -14,6 +16,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--normalizer", help="normalizer [file_MinMax | global_MinMax | file_Mean | global_Mean |"
                                              " file_standard | global_standard")
+    parser.add_argument("--output_model", help="basename for save file of the model")
 
     args = parser.parse_args()
 
@@ -27,9 +30,12 @@ if __name__ == '__main__':
         if args.normalizer == "global_Standard": normalizer = Normalizer.Global_Stadardization
         if args.normalizer == "unit": normalizer = Normalizer.UnitLength
 
+
     dataset = DCASE2018(
         meta_train_weak="meta/weak.csv",
         feat_train_weak="/homeLocal/eriador/Documents/DCASE2018/task4/features/train/weak/mel",
+        #meta_train_unlabelOutDomain="meta/unlabel_out_of_domain.csv",
+        #feat_train_unlabelOutDomain="/homeLocal/eriador/Documents/DCASE2018/task4/features/train/unlabel_out_of_domain/mel",
         normalizer=normalizer
     )
 
@@ -96,5 +102,21 @@ if __name__ == '__main__':
             dataset.validationDataset["input"],
             dataset.validationDataset["output"]
         ),
-        callbacks=[],
+        callbacks=[CallBacks.MyProgbarLogger()],
+        verbose=0
     )
+
+    # save the model
+    path = args.output_model
+    if os.path.isfile(path):
+        os.makedirs(path)
+
+    # save json
+    model_json = model.to_json()
+    with open(os.path.join(path, "_json"), "w") as f:
+        f.write(model_json)
+
+    # save weight
+    model.save_weights(os.path.join(path, "_weight"))
+
+

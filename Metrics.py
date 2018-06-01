@@ -1,5 +1,8 @@
 from keras import backend as K
+from numpy import ndarray
 
+def nothing(y_true, y_pred):
+    pass
 
 def precision(y_true, y_pred):
     """Precision metric.
