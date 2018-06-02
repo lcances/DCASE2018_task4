@@ -5,6 +5,5 @@ a.py
 .idea/
 audio/
 features/
-meta/
 /results/baseline_categorical/
 /results/baseline/

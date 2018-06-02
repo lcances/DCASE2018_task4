@@ -62,7 +62,7 @@ class CompleteLogger(Callback):
         print("%{:<10}".format(str(int(logs["batch"]) * int(self.params["batch_size"]) / self.params["samples"] * 100)[:3]), end="")
 
         for m in self.trainMetrics:
-            print("{:<12}".format(str(logs[m])[:6], end=""))
+            print("{:<12}".format(str(logs[m])[:6]), end="")
 
         print("", end="\r")
 

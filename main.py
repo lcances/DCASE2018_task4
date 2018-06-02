@@ -11,6 +11,10 @@ import CallBacks
 from datasetGenerator import DCASE2018
 
 if __name__ == '__main__':
+    # deactivate warning (TMP)
+    import warnings
+    warnings.filterwarnings("ignore")
+
     import argparse
 
     parser = argparse.ArgumentParser()
@@ -19,6 +23,7 @@ if __name__ == '__main__':
     parser.add_argument("--output_model", help="basename for save file of the model")
 
     args = parser.parse_args()
+
 
     normalizer = None
     if args.normalizer:
@@ -33,8 +38,8 @@ if __name__ == '__main__':
 
     dataset = DCASE2018(
         meta_train_weak="meta/weak.csv",
-        #feat_train_weak="/homeLocal/eriador/Documents/DCASE2018/task4/features/train/weak/mel",
-        feat_train_weak="C:/Users/leo/Documents/Cours/M2/MasterThesis/Python/DCASE2018/features/features/train/weak/mel",
+        feat_train_weak="/homeLocal/eriador/Documents/DCASE2018/task4/features/train/weak/mel",
+        #feat_train_weak="C:/Users/leo/Documents/Cours/M2/MasterThesis/Python/DCASE2018/features/features/train/weak/mel",
         #meta_train_unlabelOutDomain="meta/unlabel_out_of_domain.csv",
         #feat_train_unlabelOutDomain="/homeLocal/eriador/Documents/DCASE2018/task4/features/train/unlabel_out_of_domain/mel",
         normalizer=normalizer
