@@ -54,17 +54,7 @@ class CompleteLogger(Callback):
             self.logFile.close()
 
     def on_batch_end(self, batch, logs=None):
-        """
-        at every batch, the display is updated for the training part of the table
-        """
-
-        print("{:<8}".format(self.currentEpoch), end="")
-        print("%{:<10}".format(str(int(logs["batch"]) * int(self.params["batch_size"]) / self.params["samples"] * 100)[:3]), end="")
-
-        for m in self.trainMetrics:
-            print("{:<12}".format(str(logs[m])[:6]), end="")
-
-        print("", end="\r")
+        self.__printMetrics(logs)
 
     def on_epoch_begin(self, epoch, logs=None):
         super().on_epoch_begin(epoch, logs)
@@ -76,17 +66,7 @@ class CompleteLogger(Callback):
         """
         super().on_epoch_end(epoch, logs)
 
-        # display all metrics (tra and val)
-        print("{:<7}".format(logs["batch"]), end="")
-        print("%{:<7}".format(str(int(logs["batch"]) * int(self.params["batch_size"]) / self.params["samples"] * 100)[:3]), end="")
-
-        for m in self.trainMetrics:
-            print("{:<12}".format(str(logs[m])[:6], end=""))
-
-            print(" | ", end="")
-            for m in self.validationMetrics:
-                print("{:<12}".format(str(logs[m])[:6]), end="")
-
+        self.__printMetrics(logs, validation=True, overwrite=False)
 
         # for the detail of the metrics, it will be save into the log file
         if self.logPath is not None:
@@ -94,5 +74,46 @@ class CompleteLogger(Callback):
 
             self.logFile.write("%s\n" % epoch)
             self.logFile.write(classification_report(self.val_true, val_pred))
+
+    def __printMetrics(self, logs: dict, validation: bool = False, overwrite: bool = True, csv: bool = False):
+        if not csv:
+            # two first column
+            print("{:<8}".format(self.currentEpoch), end="")
+
+            if "batch" in logs.keys():
+                percent = int(logs["batch"]) * int(self.params["batch_size"]) / int(self.params["samples"]) * 100
+                print("%{:<10}".format(str(int(percent))[:3]), end="")
+            else:
+                print("%{:<10}".format("100"), end="")
+
+            for m in self.trainMetrics:
+                print("{:<12}".format(str(logs[m])[:6]), end="")
+
+            if validation:
+                print(" | ", end="")
+                for m in self.validationMetrics:
+                    print("{:<12}".format(str(logs[m])[:6]), end="")
+
+            if overwrite:
+                print("", end="\r")
+            else:
+                print("", end="\n")
+
+
+        if csv:
+            toWrite = ""
+
+            # two first column
+            toWrite += self.currentEpoch + ","
+            toWrite += "%100,"
+
+            # all metrics
+            for m in self.trainMetrics.extend(self.validationMetrics):
+                toWrite += str(logs[m])[:6] + ","
+
+            return toWrite
+
+
+
 
 
