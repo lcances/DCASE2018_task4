@@ -1,5 +1,6 @@
 from keras.callbacks import Callback
 from sklearn.metrics import classification_report
+import time
 
 """
 {'batch_size': 8, 'epochs': 200, 'steps': None, 'samples': 1237, 'verbose': 0, 'do_validation': True, 'metrics': ['loss', 'binary_accuracy', 'precision', 'recall', 'f1', 'val_loss', 'val_binary_accuracy', 'val_precision', 'val_recall', 'val_f1']}
@@ -20,6 +21,8 @@ class CompleteLogger(Callback):
         self.logFile = None
         self.currentEpoch = 0
 
+        self.epochStart = 0
+
     def on_train_begin(self, logs=None):
         super().on_train_begin(logs)
 
@@ -32,21 +35,8 @@ class CompleteLogger(Callback):
         self.trainMetrics = self.params["metrics"][:middle]
         self.validationMetrics = self.params["metrics"][middle:]
 
-        # Print the complete header
-        print("{:<8}".format("epoch"), end="")
-        print("{:<10}".format("progress"), end="")
+        self.__printHeader()
 
-        # print training metric name
-        for m in self.trainMetrics:
-            print("{:<12}".format(m[:10]), end="")
-
-        # print validation metric name
-        print(" | ", end="")
-        for m in self.validationMetrics:
-            print("{:<12}".format(m[:10]), end="")
-
-        print("")
-        print("_" * 6 * (len(self.trainMetrics) + len(self.validationMetrics) + 18))
 
     def on_train_end(self, logs=None):
         super().on_train_end(logs)
@@ -59,6 +49,8 @@ class CompleteLogger(Callback):
     def on_epoch_begin(self, epoch, logs=None):
         super().on_epoch_begin(epoch, logs)
         self.currentEpoch += 1
+
+        self.epochStart = time.time()
 
     def on_epoch_end(self, epoch, logs=None):
         """
@@ -97,6 +89,7 @@ class CompleteLogger(Callback):
             if overwrite:
                 print("", end="\r")
             else:
+                print(" %.2f" % (time.time() - self.epochStart), end="")
                 print("", end="\n")
 
 
@@ -113,7 +106,22 @@ class CompleteLogger(Callback):
 
             return toWrite
 
+    def __printHeader(self):
+        # Print the complete header
+        print("{:<8}".format("epoch"), end="")
+        print("{:<10}".format("progress"), end="")
 
+        # print training metric name
+        for m in self.trainMetrics:
+            print("{:<12}".format(m[:10]), end="")
+
+        # print validation metric name
+        print(" | ", end="")
+        for m in self.validationMetrics:
+            print("{:<12}".format(m[:10]), end="")
+
+        print("")
+        print("-" * (18 + 12 * len(self.trainMetrics) + 3 + 12 * len(self.validationMetrics)) )
 
 
 
