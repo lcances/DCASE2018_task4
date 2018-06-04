@@ -103,13 +103,15 @@ if __name__ == '__main__':
         x=dataset.trainingDataset["input"],
         y=dataset.trainingDataset["output"],
         epochs=100,
-        batch_size=8,
+        batch_size=2,
         validation_data=(
             dataset.validationDataset["input"],
             dataset.validationDataset["output"]
         ),
         callbacks=[
-            CallBacks.CompleteLogger(logPath=args.output_model, val_true=dataset.validationDataset["output"]),
+            CallBacks.CompleteLogger(logPath=args.output_model, validation_data=(dataset.validationDataset["input"],
+                                                                                 dataset.validationDataset["output"])
+                                     ),
         ],
         verbose=0
     )
