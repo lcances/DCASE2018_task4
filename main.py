@@ -38,10 +38,10 @@ if __name__ == '__main__':
 
     dataset = DCASE2018(
         meta_train_weak="meta/weak.csv",
-        feat_train_weak="/homeLocal/eriador/Documents/DCASE2018/task4/features/train/weak/mel",
+        feat_train_weak="features/train/weak/mel",
         #feat_train_weak="C:/Users/leo/Documents/Cours/M2/MasterThesis/Python/DCASE2018/features/features/train/weak/mel",
         #meta_train_unlabelOutDomain="meta/unlabel_out_of_domain.csv",
-        #feat_train_unlabelOutDomain="/homeLocal/eriador/Documents/DCASE2018/task4/features/train/unlabel_out_of_domain/mel",
+        #feat_train_unlabelOutDomain="features/train/unlabel_out_of_domain/mel",
         normalizer=normalizer
     )
 
@@ -102,7 +102,7 @@ if __name__ == '__main__':
     model.fit(
         x=dataset.trainingDataset["input"],
         y=dataset.trainingDataset["output"],
-        epochs=200,
+        epochs=100,
         batch_size=8,
         validation_data=(
             dataset.validationDataset["input"],
