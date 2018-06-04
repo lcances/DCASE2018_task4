@@ -10,8 +10,8 @@ def File_MinMaxNormalization(data: np.array) -> np.array:
     result = []
 
     for d in data:
-        maxi = np.max(d)
-        mini = np.min(d)
+        maxi = d.max(axis=0)
+        mini = d.min(axis=0)
 
         result.append((d - mini) / (maxi - mini))
 
@@ -23,8 +23,8 @@ def Global_MinMaxNormalization(data: np.array) -> np.array:
     :param data: N-dimension array to normalize
     :return data: N-dimension array globally normalized
     """
-    maxi = np.max(data)
-    mini = np.min(data)
+    maxi = data.max(axis=0)
+    mini = data.min(axis=0)
 
     data = (data - mini) / (maxi - mini)
 
@@ -40,7 +40,7 @@ def File_MeanNormalization(data: np.array) -> np.array:
     result = []
 
     for d in data:
-        mean = np.mean(d)
+        mean = d.mean(axis=0)
 
         result.append(d - mean)
 
@@ -52,11 +52,10 @@ def Global_MeanNormalization(data: np.array) -> np.array:
     :param data: N-dimension array to normalize
     :return: N-dimension array glovally normalized
     """
-    mean = np.mean(data)
+    mean = data.mean(axis=0)
 
     data = data - mean
 
-    np.linalg.norm()
     return data
 
 def File_Standardization(data: np.array) -> np.array:
@@ -69,8 +68,8 @@ def File_Standardization(data: np.array) -> np.array:
     result = []
 
     for d in data:
-        mean = np.mean(d)
-        var = np.var(d)
+        mean = d.mean(axis=0)
+        var = d.var(axis=0)
 
         result.append((d - mean) / var)
 
@@ -83,8 +82,8 @@ def Global_Stadardization(data: np.array) -> np.array:
     :param data: N-dimension array to normalize
     :return: N-dimension array globally normalized
     """
-    mean = np.mean(data)
-    var = np.mean(data)
+    mean = data.mean(axis=0)
+    var = data.var(axis=0)
 
     data = (data - mean) / var
 

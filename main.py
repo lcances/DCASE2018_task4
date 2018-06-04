@@ -103,7 +103,7 @@ if __name__ == '__main__':
         x=dataset.trainingDataset["input"],
         y=dataset.trainingDataset["output"],
         epochs=100,
-        batch_size=2,
+        batch_size=64,
         validation_data=(
             dataset.validationDataset["input"],
             dataset.validationDataset["output"]
