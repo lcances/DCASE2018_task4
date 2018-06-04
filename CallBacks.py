@@ -21,6 +21,7 @@ class CompleteLogger(Callback):
         self.trainMetrics = []
         self.validationMetrics = []
 
+        self.logging = logPath is not None
         self.logPath = {"general": logPath}
         self.logFile = {}
 
@@ -95,6 +96,9 @@ class CompleteLogger(Callback):
     #       DISPLAY AND LOG FUNCTIONS
     # ==================================================================================================================
     def __initLogFiles(self):
+        if not self.logging:
+            return
+
         rootPath = self.logPath["general"]
 
         # add one files for each metrics that will be compute for classes
@@ -112,6 +116,9 @@ class CompleteLogger(Callback):
             self.__logClassesheader(self.logFile[key])
 
     def __finishLogFiles(self):
+        if not self.logging:
+            return
+
         for key in self.logPath.keys():
             self.logFile[key].close()
 
@@ -157,7 +164,7 @@ class CompleteLogger(Callback):
         print("-" * (18 + 12 * len(self.trainMetrics) + 3 + 12 * len(self.validationMetrics)) )
 
     def __logGeneralHeader(self):
-        if self.logFile is not None:
+        if self.logging:
             self.logFile["general"].write("epoch,progress,")
 
             for m in self.metrics:
@@ -166,7 +173,7 @@ class CompleteLogger(Callback):
             self.logFile["general"].write("duration\n")
 
     def __logGeneralEpoch(self, logs: dict):
-        if self.logFile is not None:
+        if self.logging:
             self.logFile["general"].write("%s,100," % (self.currentEpoch))
 
             # all metrics
@@ -179,20 +186,22 @@ class CompleteLogger(Callback):
             self.logFile["general"].write("%s\n" % self.epochDuration)
 
     def __logClassesheader(self, file):
-        file.write("epoch,")
-        for key in DCASE2018.class_correspondance.keys():
-            if key != list(DCASE2018.class_correspondance.keys())[-1]:
-                file.write("%s," % key)
-            else:
-                file.write("%s\n" % key)
+        if self.logging:
+            file.write("epoch,")
+            for key in DCASE2018.class_correspondance.keys():
+                if key != list(DCASE2018.class_correspondance.keys())[-1]:
+                    file.write("%s," % key)
+                else:
+                    file.write("%s\n" % key)
 
     def __logClassesEpoch(self):
         def convertToCSV(line: list):
             return ",".join(map(str, line))
 
-        precision, recall, f1 = self.__computeMetrics()
+        if self.logging:
+            precision, recall, f1 = self.__computeMetrics()
 
-        self.logFile["precision"].write(str(self.currentEpoch) + "," + convertToCSV(precision) + "\n")
-        self.logFile["recall"].write(str(self.currentEpoch) + "," + convertToCSV(recall) + "\n")
-        self.logFile["f1"].write(str(self.currentEpoch) + "," + convertToCSV(f1) + "\n")
+            self.logFile["precision"].write(str(self.currentEpoch) + "," + convertToCSV(precision) + "\n")
+            self.logFile["recall"].write(str(self.currentEpoch) + "," + convertToCSV(recall) + "\n")
+            self.logFile["f1"].write(str(self.currentEpoch) + "," + convertToCSV(f1) + "\n")
 
