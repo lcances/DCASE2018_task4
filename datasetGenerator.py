@@ -65,15 +65,16 @@ class DCASE2018:
         self.trainingDataset["output"] = np.array(self.trainingDataset["output"])
         self.validationDataset["output"] = np.array(self.validationDataset["output"])
 
-        # extend dataset to have enough dim for conv2D
-        self.trainingDataset["input"] = np.expand_dims(self.trainingDataset["input"], axis=-1)
-        self.validationDataset["input"] = np.expand_dims(self.validationDataset["input"], axis=-1)
-
         # normalization
         if self.normalizer is not None:
             print("==== Normalization stage ====")
             self.normalizer(self.trainingDataset["input"])
             self.normalizer(self.validationDataset["input"])
+
+        # extend dataset to have enough dim for conv2D
+        self.trainingDataset["input"] = np.expand_dims(self.trainingDataset["input"], axis=-1)
+        self.validationDataset["input"] = np.expand_dims(self.validationDataset["input"], axis=-1)
+
 
     def __loadMeta(self):
         """ Load the metadata for all subset of the DCASE2018 task4 dataset"""
