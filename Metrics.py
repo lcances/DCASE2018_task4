@@ -1,9 +1,8 @@
 from keras import backend as K
-from numpy import ndarray
 
-def nothing(y_true, y_pred):
-    pass
-
+# ==================================================================================================================
+#   Metrics for Keras
+# ==================================================================================================================
 def precision(y_true, y_pred):
     """Precision metric.
 
@@ -62,3 +61,5 @@ def f1(y_true, y_pred):
     precision = precision(y_true, y_pred)
     recall = recall(y_true, y_pred)
     return 2 * ((precision * recall) / (precision + recall + K.epsilon()))
+
+
