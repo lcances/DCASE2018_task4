@@ -58,10 +58,10 @@ if __name__ == '__main__':
 
     # MODEL HYPERPARAMETERS ====
     epochs = 100
-    batch_size = 64
+    batch_size = 4
     metrics = ["binary_accuracy", Metrics.precision, Metrics.recall, Metrics.f1]
     loss = "binary_crossentropy"
-    optimizer = Nadam(lr=0.002, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)
+    optimizer = "adam"
     callbacks = [
         CallBacks.CompleteLogger(logPath=dirPath, validation_data=(dataset.validationDataset["input"],
                                                                    dataset.validationDataset["output"])
