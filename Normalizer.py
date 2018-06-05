@@ -91,8 +91,12 @@ def Global_Standardization(data: np.array) -> np.array:
 
 
 def UnitLength(data: np.array, order: int =None) -> np.array:
-    return data / np.linalg.norm(data, ord=order, axis=1)
+    result = []
 
+    for d in data:
+        result.append(d / np.linalg.norm(d, ord=order, axis=0))
+
+    return np.array(result)
 
 if __name__=='__main__':
     import random
