@@ -4,6 +4,7 @@ import keras.utils
 from keras.layers import Reshape, BatchNormalization, Activation, MaxPooling2D, Conv2D, Dropout, GRU, Dense, \
     Input, Bidirectional, TimeDistributed, GlobalAveragePooling1D
 from keras.models import Model
+from keras.optimizers import Nadam
 
 import Normalizer
 import Metrics
@@ -15,16 +16,15 @@ if __name__ == '__main__':
     import warnings
     warnings.filterwarnings("ignore")
 
+    # ARGUMENT PARSER ====
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--normalizer", help="normalizer [file_MinMax | global_MinMax | file_Mean | global_Mean |"
-                                             " file_standard | global_standard")
+    parser.add_argument("--normalizer", help="normalizer [file_MinMax | global_MinMax | file_Mean | global_Mean | file_standard | global_standard | unit")
     parser.add_argument("--output_model", help="basename for save file of the model")
-
     args = parser.parse_args()
 
-
+    # PROCESS ARGUMENTS ====
     normalizer = None
     if args.normalizer:
         if args.normalizer == "file_MinMax": normalizer = Normalizer.File_MinMaxNormalization
@@ -46,7 +46,7 @@ if __name__ == '__main__':
             print("File doesn't exist, creating it")
             os.makedirs(dirName)
 
-
+    # GENERATE DATASET ====
     dataset = DCASE2018(
         meta_train_weak="meta/weak.csv",
         feat_train_weak="features/train/weak/mel",
@@ -55,6 +55,18 @@ if __name__ == '__main__':
         #feat_train_unlabelOutDomain="features/train/unlabel_out_of_domain/mel",
         normalizer=normalizer
     )
+
+    # MODEL HYPERPARAMETERS ====
+    epochs = 100
+    batch_size = 64
+    metrics = ["binary_accuracy", Metrics.precision, Metrics.recall, Metrics.f1]
+    loss = "binary_crossentropy"
+    optimizer = Nadam(lr=0.002, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)
+    callbacks = [
+        CallBacks.CompleteLogger(logPath=dirPath, validation_data=(dataset.validationDataset["input"],
+                                                                   dataset.validationDataset["output"])
+                                 ),
+    ]
 
     # ==================================================================================================================
     #   Creating the model
@@ -78,11 +90,9 @@ if __name__ == '__main__':
     block3 = Activation(activation="relu")(block3)
     block3 = MaxPooling2D(pool_size=(1, 4))(block3)
     block3 = Dropout(0.3)(block3)
-    # block3 ndim = 4
 
     targetShape = dataset.originalShape[0]
     reshape = Reshape(target_shape=(targetShape, 64))(block3)
-    # reshape ndim = 3
 
     gru = Bidirectional(
         GRU(kernel_initializer='glorot_uniform', recurrent_dropout=0.0, dropout=0.3, units=64, return_sequences=True)
@@ -99,31 +109,18 @@ if __name__ == '__main__':
     model = Model(inputs=kInput, outputs=output)
     keras.utils.print_summary(model, line_length=100)
 
-    # ======== model hyper parameters ========
-    epochs = 100
-    metrics = "binary_accuracy"
-    loss = "binary_crossentropy"
-
-    # compile model
-    model.compile(loss=loss,
-                  optimizer="adam",
-                  metrics=[metrics, Metrics.precision, Metrics.recall, Metrics.f1])
-
-    # fit
+    # compile & fit model
+    model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
     model.fit(
         x=dataset.trainingDataset["input"],
         y=dataset.trainingDataset["output"],
-        epochs=100,
-        batch_size=64,
+        epochs=epochs,
+        batch_size=batch_size,
         validation_data=(
             dataset.validationDataset["input"],
             dataset.validationDataset["output"]
         ),
-        callbacks=[
-            CallBacks.CompleteLogger(logPath=dirPath, validation_data=(dataset.validationDataset["input"],
-                                                                                 dataset.validationDataset["output"])
-                                     ),
-        ],
+        callbacks=callbacks,
         verbose=0
     )
 
