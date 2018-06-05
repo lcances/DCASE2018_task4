@@ -32,8 +32,19 @@ if __name__ == '__main__':
         if args.normalizer == "file_Mean": normalizer = Normalizer.File_MeanNormalization
         if args.normalizer == "global_Mean": normalizer = Normalizer.Global_MeanNormalization
         if args.normalizer == "file_Standard": normalizer = Normalizer.File_Standardization
-        if args.normalizer == "global_Standard": normalizer = Normalizer.Global_Stadardization
+        if args.normalizer == "global_Standard": normalizer = Normalizer.Global_Standardization
         if args.normalizer == "unit": normalizer = Normalizer.UnitLength
+
+    # Prepare the save directory (if needed)
+    dirPath = None
+    if args.output_model is not None:
+        dirPath = args.output_model
+        dirName = os.path.dirname(dirPath)
+        fileName = os.path.basename(dirPath)
+
+        if not os.path.isdir(dirName):
+            print("File doesn't exist, creating it")
+            os.makedirs(dirName)
 
 
     dataset = DCASE2018(
@@ -109,24 +120,19 @@ if __name__ == '__main__':
             dataset.validationDataset["output"]
         ),
         callbacks=[
-            CallBacks.CompleteLogger(logPath=args.output_model, validation_data=(dataset.validationDataset["input"],
+            CallBacks.CompleteLogger(logPath=dirPath, validation_data=(dataset.validationDataset["input"],
                                                                                  dataset.validationDataset["output"])
                                      ),
         ],
         verbose=0
     )
 
-    # save the model
-    path = args.output_model
-    if os.path.isfile(path):
-        os.makedirs(path)
-
     # save json
     model_json = model.to_json()
-    with open(os.path.join(path, "_json"), "w") as f:
+    with open(dirPath + "_model.json", "w") as f:
         f.write(model_json)
 
     # save weight
-    model.save_weights(os.path.join(path, "_weight"))
+    model.save_weights(dirPath + "_weight")
 
 
