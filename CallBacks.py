@@ -2,6 +2,7 @@ from keras.callbacks import Callback
 from sklearn.metrics import precision_score, recall_score, f1_score
 
 import time
+import os
 import numpy as np
 from datasetGenerator import DCASE2018
 
@@ -18,6 +19,7 @@ class CompleteLogger(Callback):
         self.validation_input = validation_data[0]
         self.validation_output = validation_data[1]
 
+        self.metrics = []
         self.trainMetrics = []
         self.validationMetrics = []
 
@@ -45,6 +47,7 @@ class CompleteLogger(Callback):
 
     def on_train_end(self, logs=None):
         super().on_train_end(logs)
+
         if self.logPath is not None:
             self.__finishLogFiles()
 
@@ -90,22 +93,26 @@ class CompleteLogger(Callback):
         prediction[prediction > 0.5] = 1
         prediction[prediction < 0.5] = 0
 
-
-
     # ==================================================================================================================
-    #       DISPLAY AND LOG FUNCTIONS
+    #       LOG FUNCTIONS
     # ==================================================================================================================
     def __initLogFiles(self):
         if not self.logging:
             return
 
-        rootPath = self.logPath["general"]
+        dirPath = self.logPath["general"]
+        dirName = os.path.dirname(dirPath)
+        fileName = os.path.basename(dirPath)
+
+        if not os.path.isdir(dirName):
+            print("doesn't exist, creating it")
+            os.makedirs(dirName)
 
         # add one files for each metrics that will be compute for classes
-        self.logPath["precision"] = rootPath + "_precision.csv"
-        self.logPath["recall"] = rootPath + "_recall.csv"
-        self.logPath["f1"] = rootPath + "_f1.csv"
-        self.logPath["general"] += ".csv"
+        self.logPath["precision"] = dirPath + "_precision.csv"
+        self.logPath["recall"] = dirPath + "_recall.csv"
+        self.logPath["f1"] = dirPath + "_f1.csv"
+        self.logPath["general"] += "_metrics.csv"
 
         # open the files
         for key in self.logPath.keys():
@@ -121,47 +128,6 @@ class CompleteLogger(Callback):
 
         for key in self.logPath.keys():
             self.logFile[key].close()
-
-    def __printMetrics(self, logs: dict, validation: bool = False, overwrite: bool = True):
-        # two first column
-        print("{:<8}".format(self.currentEpoch), end="")
-
-        if "batch" in logs.keys():
-            percent = int(logs["batch"]) * int(self.params["batch_size"]) / int(self.params["samples"]) * 100
-            print("%{:<10}".format(str(int(percent))[:3]), end="")
-        else:
-            print("%{:<10}".format("100"), end="")
-
-        for m in self.trainMetrics:
-            print("{:<12}".format(str(logs[m])[:6]), end="")
-
-        if validation:
-            print(" | ", end="")
-            for m in self.validationMetrics:
-                print("{:<12}".format(str(logs[m])[:6]), end="")
-
-        if overwrite:
-            print("", end="\r")
-        else:
-            print(" %.2f" % self.epochDuration, end="")
-            print("", end="\n")
-
-    def __printHeader(self):
-        # Print the complete header
-        print("{:<8}".format("epoch"), end="")
-        print("{:<10}".format("progress"), end="")
-
-        # print training metric name
-        for m in self.trainMetrics:
-            print("{:<12}".format(m[:10]), end="")
-
-        # print validation metric name
-        print(" | ", end="")
-        for m in self.validationMetrics:
-            print("{:<12}".format(m[:10]), end="")
-
-        print("")
-        print("-" * (18 + 12 * len(self.trainMetrics) + 3 + 12 * len(self.validationMetrics)) )
 
     def __logGeneralHeader(self):
         if self.logging:
@@ -204,4 +170,49 @@ class CompleteLogger(Callback):
             self.logFile["precision"].write(str(self.currentEpoch) + "," + convertToCSV(precision) + "\n")
             self.logFile["recall"].write(str(self.currentEpoch) + "," + convertToCSV(recall) + "\n")
             self.logFile["f1"].write(str(self.currentEpoch) + "," + convertToCSV(f1) + "\n")
+
+    # ==================================================================================================================
+    #       DISPLAY FUNCTIONS
+    # ==================================================================================================================
+    def __printMetrics(self, logs: dict, validation: bool = False, overwrite: bool = True):
+        # two first column
+        print("{:<8}".format(self.currentEpoch), end="")
+
+        if "batch" in logs.keys():
+            percent = int(logs["batch"]) * int(self.params["batch_size"]) / int(self.params["samples"]) * 100
+            print("%{:<10}".format(str(int(percent))[:3]), end="")
+        else:
+            print("%{:<10}".format("100"), end="")
+
+        for m in self.trainMetrics:
+            print("{:<12}".format(str(logs[m])[:6]), end="")
+
+        if validation:
+            print(" | ", end="")
+            for m in self.validationMetrics:
+                print("{:<12}".format(str(logs[m])[:6]), end="")
+
+        if overwrite:
+            print("", end="\r")
+        else:
+            print(" %.2f" % self.epochDuration, end="")
+            print("", end="\n")
+
+    def __printHeader(self):
+        # Print the complete header
+        print("{:<8}".format("epoch"), end="")
+        print("{:<10}".format("progress"), end="")
+
+        # print training metric name
+        for m in self.trainMetrics:
+            print("{:<12}".format(m[:10]), end="")
+
+        # print validation metric name
+        print(" | ", end="")
+        for m in self.validationMetrics:
+            print("{:<12}".format(m[:10]), end="")
+
+        print("")
+        print("-" * (18 + 12 * len(self.trainMetrics) + 3 + 12 * len(self.validationMetrics)) )
+
 
