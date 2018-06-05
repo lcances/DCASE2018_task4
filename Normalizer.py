@@ -76,7 +76,7 @@ def File_Standardization(data: np.array) -> np.array:
     return np.array(result)
 
 
-def Global_Stadardization(data: np.array) -> np.array:
+def Global_Standardization(data: np.array) -> np.array:
     """
     Perform a standardization on the whole dataset
     :param data: N-dimension array to normalize
