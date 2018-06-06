@@ -122,7 +122,7 @@ class CompleteLogger(Callback):
         for key in self.logFile:
             if key != "general":
                 self.__logClassesheader(self.logFile[key])
-        self.__logGeneralHeader(self.logFile["general"])
+        self.__logGeneralHeader()
 
     def __finishLogFiles(self):
         if not self.logging:
