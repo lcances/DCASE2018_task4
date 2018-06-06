@@ -4,11 +4,16 @@ import keras.utils
 from keras.layers import Reshape, BatchNormalization, Activation, MaxPooling2D, Conv2D, Dropout, GRU, Dense, \
     Input, Bidirectional, TimeDistributed, GlobalAveragePooling1D
 from keras.models import Model
-from keras.optimizers import Nadam
+
 
 import Normalizer
 import Metrics
 import CallBacks
+
+import random
+import numpy.random as npr
+from tensorflow import set_random_seed
+
 from datasetGenerator import DCASE2018
 
 if __name__ == '__main__':
@@ -45,6 +50,12 @@ if __name__ == '__main__':
         if not os.path.isdir(dirName):
             print("File doesn't exist, creating it")
             os.makedirs(dirName)
+
+    # fix the random seeds
+    seed = 1324
+    random.seed(seed)
+    npr.seed(seed)
+    set_random_seed(seed)
 
     # GENERATE DATASET ====
     dataset = DCASE2018(

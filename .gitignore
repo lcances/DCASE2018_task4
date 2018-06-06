@@ -9,6 +9,7 @@ features_2/
 *.csv
 *.png
 *.json
-/results/baseline_categorical/
-/results/baseline/
+*.tar.xz
+results/baseline_categorical/
+results/baseline/
 __pycache__/

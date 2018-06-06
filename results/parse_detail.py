@@ -54,14 +54,13 @@ if __name__=='__main__':
 
     plt.figure(figsize=(16, 10))
     plt.title(args.name)
-    plt.bar(np.array(range(len(hr))) - 0.2, hr, width= 0.2, tick_label=classes[:-1], zorder=3, color = "C0", label="hr")
-    plt.bar(np.array(range(len(hp))), hp, width= 0.2, tick_label=classes[:-1], zorder=3, color = "C1", label="hp")
-    plt.bar(np.array(range(len(hf))) + 0.2, hf, width= 0.2, tick_label=classes[:-1], zorder=3, color = "C2", label="hf")
+    plt.bar(np.array(range(len(hr))) - 0.2, hr, width= 0.2, tick_label=classes[:-1], zorder=3, color = "C0", label="recall")
+    plt.bar(np.array(range(len(hp))), hp, width= 0.2, tick_label=classes[:-1], zorder=3, color = "C1", label="precision")
+    plt.bar(np.array(range(len(hf))) + 0.2, hf, width= 0.2, tick_label=classes[:-1], zorder=3, color = "C2", label="f1")
     #plt.xticks(rotation="85")
     plt.grid(zorder=0)
     plt.tight_layout()
     plt.legend()
-    plt.show()
     plt.savefig(args.file + ".png")
 
     """
