@@ -63,6 +63,7 @@ if __name__=='__main__':
     plt.legend()
     plt.show()
     plt.savefig(args.file + ".png")
+
     """
     # display
     print("display")
