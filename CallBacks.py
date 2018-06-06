@@ -120,7 +120,9 @@ class CompleteLogger(Callback):
 
         # write headers
         for key in self.logFile:
-            self.__logClassesheader(self.logFile[key])
+            if key != "general":
+                self.__logClassesheader(self.logFile[key])
+        self.__logGeneralHeader(self.logFile["general"])
 
     def __finishLogFiles(self):
         if not self.logging:
