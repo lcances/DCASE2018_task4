@@ -49,12 +49,13 @@ if __name__ == '__main__':
     # GENERATE DATASET ====
     dataset = DCASE2018(
         meta_train_weak="meta/weak.csv",
-        feat_train_weak="features/train/weak/mel",
+        meta_train_unlabelOutDomain="meta/unlabel_out_of_domain.csv",
+        feat_train_weak="features_2/train/weak/mel",
+        feat_train_unlabelOutDomain="features_2/train/unlabel_out_of_domain/mel",
         #feat_train_weak="C:/Users/leo/Documents/Cours/M2/MasterThesis/Python/DCASE2018/features/features/train/weak/mel",
-        #meta_train_unlabelOutDomain="meta/unlabel_out_of_domain.csv",
-        #feat_train_unlabelOutDomain="features/train/unlabel_out_of_domain/mel",
         normalizer=normalizer
     )
+    print(dataset)
 
     # MODEL HYPERPARAMETERS ====
     epochs = 100
@@ -130,6 +131,6 @@ if __name__ == '__main__':
         f.write(model_json)
 
     # save weight
-    model.save_weights(dirPath + "_weight")
+    model.save_weights(dirPath + "_weight.h5py")
 
 

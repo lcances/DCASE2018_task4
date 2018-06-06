@@ -4,7 +4,7 @@ from random import shuffle
 import numpy as np
 
 class DCASE2018:
-    NB_CLASS = 10
+    NB_CLASS = 11
     class_correspondance = {
         "Alarm_bell_ringing": 0,
         "Speech": 1,
@@ -43,9 +43,13 @@ class DCASE2018:
         }
 
         self.validationPercent = validationPercent
-        self.nbClass = nbClass
         self.originalShape = None
         self.normalizer = normalizer
+
+        if self.meta_train_uod != "":
+            self.nbClass = nbClass + 1
+        else:
+            self.nbClass = nbClass
 
         # dataset that will be used
         self.nbSequence = nb_sequence
@@ -59,6 +63,9 @@ class DCASE2018:
         self.__preProcessing()
 
     def __preProcessing(self):
+        # save original shape
+        self.originalShape = self.trainingDataset["input"][0].shape
+
         # convert to np.array
         self.trainingDataset["input"] = np.array(self.trainingDataset["input"])
         self.validationDataset["input"] = np.array(self.validationDataset["input"])
@@ -98,78 +105,85 @@ class DCASE2018:
         self.metadata["uod"] = load(self.meta_train_uod, int(nbFileForUod))
 
     def __createDataset(self):
-        nbError = 0
-        error_files = []
 
-        print("before extending the weak dataset")
-        print(len(self.metadata["weak"]))
+        def loadFeatures(subset: dict, toLoad: list, featDir: str):
+            subset["input"] = []
 
-        # convert basename to absolute path (needed for mixing both weak and uod dataset, only if dir is used
+            for info in toLoad:
+                path = info[0]
+
+                if os.path.isfile(path):
+                    output = [0] * DCASE2018.NB_CLASS
+                    feature = np.load(path).T
+
+                    subset["input"].append(feature)
+
+                    if len(info) > 1:
+                        for cls in info[1].split(","):
+                            output[DCASE2018.class_correspondance[cls.rstrip()]] = 1
+                    else:
+                        output[DCASE2018.class_correspondance["blank"]] = 1
+
+                    subset["output"].append(output)
+
+        def balancedSplit():
+            """ Split the weak subset into a balanced weak training and weak validation subsets"""
+            splited = [[] for i in range(DCASE2018.NB_CLASS)]
+
+            # separate the dataset into the 11 classes
+            for info in self.metadata["weak"]:
+                if len(info) > 1:
+                    for cls in info[1].split(","):
+                        splited[DCASE2018.class_correspondance[cls.rstrip()]].append(info)
+                else:
+                    splited[DCASE2018.class_correspondance["blank"]].append(info)
+
+            # for each class, split into two (80%, 20%) for training and validation
+            training = []
+            validation = []
+            for cls in splited:
+                cutIndex = int(len(cls) * self.validationPercent)
+                training.extend(cls[cutIndex:])
+                validation.extend(cls[:cutIndex])
+
+            return training, validation
+
+
+
+        # convert basename to absolute path (needed for mixing both weak and uod dataset), and extend weak dataset
+        # only if dir is used
         if self.meta_train_uod != "":
-            self.metadata["weak"] = [os.path.join(self.feat_train_weak, info[0] + ".npy") for info in self.metadata["weak"]]
-            self.metadata["weak"].extend([os.path.join(self.feat_train_uod, info[0] + ".npy") for info in self.metadata["uod"]])
+            for info in self.metadata["weak"]:
+                info[0] = os.path.join(self.feat_train_weak, info[0] + ".npy")
+            for info in self.metadata["uod"]:
+                info[0] = os.path.join(self.feat_train_uod, info[0][:-1] + ".npy")
 
-        print("after extending the weak dataset")
-        print(len(self.metadata["weak"]))
+            self.metadata["weak"].extend(self.metadata["uod"])
 
-        # shuffle the metadata for the weak dataset
-        shuffle(self.metadata["weak"])
-        cutIndex = int(len(self.metadata["weak"]) * self.validationPercent)
 
-        # ======== Training subset ========
-        training_data = self.metadata["weak"][cutIndex:]
 
-        self.trainingDataset["input"] = []
-        for info in training_data:
-            path = os.path.join(self.feat_train_weak, info[0] + ".npy")
-            if os.path.isfile(path):
-                output = [0] * DCASE2018.NB_CLASS
-                feature = np.load(path).T
+        # split the weak subset into two classes wise evenly distributed
+        training_data, validation_data = balancedSplit()
 
-                # save the original shape of the data
-                if self.originalShape is None:
-                    self.originalShape = feature.shape
-                    print("original Shape: ", self.originalShape)
+        # shuffle and load the features in memory
+        shuffle(training_data)
+        shuffle(validation_data)
 
-                self.trainingDataset["input"].append(feature)
-
-                if len(info) > 1:
-                    for cls in info[1].split(","):
-                        output[DCASE2018.class_correspondance[cls.rstrip()]] = 1
-                else:
-                    output[DCASE2018.class_correspondance["blank"]] = 1
-
-                self.trainingDataset["output"].append(output)
-            else:
-                nbError += 1
-                error_files.append(path)
-
-        # ======== validation subset ========
-        validation_data = self.metadata["weak"][:cutIndex]
-
-        self.validationDataset["input"] = []
-        for info in validation_data:
-            path = os.path.join(self.feat_train_weak, info[0] + ".npy")
-            if os.path.isfile(path):
-                output = [0] * DCASE2018.NB_CLASS
-                feature = np.load(path).T
-
-                self.validationDataset["input"].append(feature)
-
-                if len(info) > 1:
-                    for cls in info[1].split(","):
-                        output[DCASE2018.class_correspondance[cls.rstrip()]] = 1
-
-                else:
-                    output[DCASE2018.class_correspondance["blank"]] = 1
-
-                self.validationDataset["output"].append(output)
-
-            else:
-                nbError += 1
-                error_files.append(path)
+        loadFeatures(self.trainingDataset, training_data, self.feat_train_weak)
+        loadFeatures(self.validationDataset, validation_data, self.feat_train_weak)
 
     def getInputShape(self):
         shape = self.trainingDataset["input"][0].shape
         return (shape[0], shape[1], 1)
 
+    def __str__(self):
+        output = "-" * 30 + "\n"
+
+        if self.meta_train_uod != "":
+            output += "Dataset has been augmented using the unlabel out of domain for \"blank\" class \n"
+            output += "%s files added\n\n" % len(self.metadata["uod"])
+
+        output += "Training files: %s\nValidation files: %s\n" % (len(self.trainingDataset["input"]), len(self.validationDataset["input"]))
+        output += "Validation ratio: %s" % self.validationPercent
+
+        return output
