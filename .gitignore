@@ -5,5 +5,10 @@ a.py
 .idea/
 audio/
 features/
+features_2/
+*.csv
+*.png
+*.json
 /results/baseline_categorical/
 /results/baseline/
+__pycache__/
