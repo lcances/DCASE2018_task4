@@ -70,7 +70,7 @@ if __name__ == '__main__':
 
     # MODEL HYPERPARAMETERS ====
     epochs = 100
-    batch_size = 4
+    batch_size = 12
     metrics = ["binary_accuracy", Metrics.precision, Metrics.recall, Metrics.f1]
     loss = "binary_crossentropy"
     optimizer = "adam"

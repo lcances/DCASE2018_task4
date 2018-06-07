@@ -96,7 +96,7 @@ class DCASE2018:
                 else:
                     return [d.split("\t") for d in data[1:]][:nbFile]
 
-        self.metadata["weak"] = load(self.meta_train_weak)
+        self.metadata["weak"] = load(self.meta_train_weak)[:100]
         self.metadata["uid"] = load(self.meta_train_uid)
         self.metadata["test"] = load(self.meta_test)
 

@@ -82,7 +82,6 @@ class CompleteLogger(Callback):
         # calc metrics for each classes separately
         prediction = self.model.predict(self.validation_input)
         self.__applyThreshold(prediction)
-
         precision = precision_score(self.validation_output, prediction, average=None)
         recall = recall_score(self.validation_output, prediction, average=None)
         f1 = f1_score(self.validation_output, prediction, average=None)
