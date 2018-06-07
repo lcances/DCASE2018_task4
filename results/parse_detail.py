@@ -3,66 +3,66 @@ import numpy as np
 import argparse
 import os
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--file", help="Path to file to parse")
-parser.add_argument("--name", help="Name of the graph")
+class DetailParser:
+    CLASSES = ["Alarm_bell_ringing", "Speech", "Dog", "Cat", "Vacuum_cleaner", "Dishes", "Frying", "Electric_shaver_toothbrush", "Blender", "Running_water", "blank"]
 
-args = parser.parse_args()
+    @staticmethod
+    def drawLine(high: float) -> tuple:
+        x = np.linspace(0, 100, 100)
+        y = [high] * x.size
 
-global classes, colors
-classes = ["Alarm_bell_ringing", "Speech", "Dog", "Cat", "Vacuum_cleaner", "Dishes", "Frying", "Electric_shaver_toothbrush", "Blender", "Running_water", "blank"]
-colors = ["C0", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9"]
+        return y, x
 
-def drawLine(high: float) -> tuple:
-    x = np.linspace(0, 100, 100)
-    y = [high] * x.size
+    @staticmethod
+    def loadFile(path: str):
+        output = []
+        with open(path, "r") as f:
+            lines = f.readlines()
 
-    return y, x
+        for line in lines[2:]:
+            detail = line.split(",")
 
-def loadFile(path: str):
-    output = []
-    with open(path, "r") as f:
-        lines = f.readlines()
+            # reformat last column
+            detail[-1] = detail[-1][:5]
+            output.append(detail)
 
-    for line in lines[2:]:
-        detail = line.split(",")
+        return np.array(output, dtype=float)
 
-        # reformat last column
-        detail[-1] = detail[-1][:5]
-        output.append(detail)
+    @staticmethod
+    def separate_classes(matrix: np.array) -> dict:
+        output = {}
 
-    return np.array(output, dtype=float)
+        for i in range(len(DetailParser.CLASSES) - 1):
+            output[DetailParser.CLASSES[i]] = matrix[:,i+1]
 
-def separate_classes(matrix: np.array) -> dict:
-    output = {}
+        return output
 
-    for i in range(len(classes) - 1):
-        output[classes[i]] = matrix[:,i+1]
+    @staticmethod
+    def getFinalValue(matrix: np.array, epoch: int) -> list:
+        if epoch >= matrix.shape[0]:
+            epoch = matrix.shape[0] - 1
 
-    return output
+        return matrix[int(epoch),:][1:]
 
-def getFinalValue(matrix: np.array) -> list:
-    return matrix[-1,:][1:]
+    @staticmethod
+    def parseAndSave(path: str, name: str, epoch: int):
+        data_recall = DetailParser.loadFile(path + "_recall.csv")
+        data_prec = DetailParser.loadFile(path + "_precision.csv")
+        data_f1 = DetailParser.loadFile(path + "_f1.csv")
+        hr = DetailParser.getFinalValue(data_recall, epoch)
+        hp = DetailParser.getFinalValue(data_prec, epoch)
+        hf = DetailParser.getFinalValue(data_f1, epoch)
 
-if __name__=='__main__':
-    data_recall = loadFile(args.file + "_recall.csv")
-    data_prec = loadFile(args.file + "_precision.csv")
-    data_f1 = loadFile(args.file + "_f1.csv")
-    hr = getFinalValue(data_recall)
-    hp = getFinalValue(data_prec)
-    hf = getFinalValue(data_f1)
-
-    plt.figure(figsize=(16, 10))
-    plt.title(args.name)
-    plt.bar(np.array(range(len(hr))) - 0.2, hr, width= 0.2, tick_label=classes, zorder=3, color = "C0", label="recall")
-    plt.bar(np.array(range(len(hp))), hp, width= 0.2, tick_label=classes, zorder=3, color = "C1", label="precision")
-    plt.bar(np.array(range(len(hf))) + 0.2, hf, width= 0.2, tick_label=classes, zorder=3, color = "C2", label="f1")
-    #plt.xticks(rotation="85")
-    plt.grid(zorder=0)
-    plt.tight_layout()
-    plt.legend()
-    plt.show()
-    plt.savefig(args.file + ".png")
+        plt.figure(figsize=(16, 10))
+        plt.title(name)
+        plt.bar(np.array(range(len(hr))) - 0.2, hr, width= 0.2, tick_label=DetailParser.CLASSES, zorder=3, color = "C0", label="recall")
+        plt.bar(np.array(range(len(hp))), hp, width= 0.2, tick_label=DetailParser.CLASSES, zorder=3, color = "C1", label="precision")
+        plt.bar(np.array(range(len(hf))) + 0.2, hf, width= 0.2, tick_label=DetailParser.CLASSES, zorder=3, color = "C2", label="f1")
+        #plt.xticks(rotation="85")
+        plt.grid(zorder=0)
+        plt.tight_layout()
+        plt.legend()
+        plt.savefig(name + ".png")
 
     """
     # display
