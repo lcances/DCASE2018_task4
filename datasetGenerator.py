@@ -128,7 +128,7 @@ class DCASE2018:
 
         def balancedSplit():
             """ Split the weak subset into a balanced weak training and weak validation subsets"""
-            splited = [[] for i in range(DCASE2018.NB_CLASS)]
+            splited = [[] for i in range(self.nbClass)]
 
             # separate the dataset into the 11 classes
             for info in self.metadata["weak"]:
@@ -148,8 +148,6 @@ class DCASE2018:
 
             return training, validation
 
-
-
         # convert basename to absolute path (needed for mixing both weak and uod dataset), and extend weak dataset
         # only if dir is used
         if self.meta_train_uod != "":
@@ -159,8 +157,6 @@ class DCASE2018:
                 info[0] = os.path.join(self.feat_train_uod, info[0][:-1] + ".npy")
 
             self.metadata["weak"].extend(self.metadata["uod"])
-
-
 
         # split the weak subset into two classes wise evenly distributed
         training_data, validation_data = balancedSplit()
