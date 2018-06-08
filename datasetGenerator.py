@@ -175,6 +175,7 @@ class DCASE2018:
     def __str__(self):
         output = "-" * 30 + "\n"
 
+        output += "Using feature: " + os.path.basename(self.feat_train_weak) + "\n"
         if self.meta_train_uod != "":
             output += "Dataset has been augmented using the unlabel out of domain for \"blank\" class \n"
             output += "%s files added\n\n" % len(self.metadata["uod"])
