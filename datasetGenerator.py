@@ -96,7 +96,7 @@ class DCASE2018:
                 else:
                     return [d.split("\t") for d in data[1:]][:nbFile]
 
-        self.metadata["weak"] = load(self.meta_train_weak)[:100]
+        self.metadata["weak"] = load(self.meta_train_weak)
         self.metadata["uid"] = load(self.meta_train_uid)
         self.metadata["test"] = load(self.meta_test)
 
@@ -113,7 +113,7 @@ class DCASE2018:
                 path = info[0]
 
                 if os.path.isfile(path):
-                    output = [0] * DCASE2018.NB_CLASS
+                    output = [0] * self.nbClass
                     feature = np.load(path).T
 
                     subset["input"].append(feature)
