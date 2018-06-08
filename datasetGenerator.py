@@ -75,8 +75,8 @@ class DCASE2018:
         # normalization
         if self.normalizer is not None:
             print("==== Normalization stage ====")
-            self.trainingDataset["input"] = self.normalizer.fit_transform(self.trainingDataset["input"])
-            self.validationDataset["input"] = self.normalizer.fit_transform(self.validationDataset["input"])
+            self.trainingDataset["input"] = [self.normalizer.fit_transform(d) for d in self.trainingDataset["input"]]
+            self.validationDataset["input"] = [self.normalizer.fit_transform(d) for d in self.validationDataset["input"]]
 
         # extend dataset to have enough dim for conv2D
         self.trainingDataset["input"] = np.expand_dims(self.trainingDataset["input"], axis=-1)
