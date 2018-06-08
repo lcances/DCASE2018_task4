@@ -55,11 +55,14 @@ if __name__ == '__main__':
     set_random_seed(seed)
 
     # GENERATE DATASET ====
+    metaRoot = "meta"
+    featRoot = "features_2"
+    feat = "mel"
     dataset = DCASE2018(
-        meta_train_weak="meta/weak.csv",
-        meta_train_unlabelOutDomain="meta/unlabel_out_of_domain.csv",
-        feat_train_weak="features_2/train/weak/mel",
-        feat_train_unlabelOutDomain="features_2/train/unlabel_out_of_domain/mel",
+        meta_train_weak=os.path.join(metaRoot, "weak.csv"),
+        meta_train_unlabelOutDomain=os.path.join(metaRoot, "unlabel_out_of_domain.csv"),
+        feat_train_weak=os.path.join(featRoot, "train", "weak", feat),
+        feat_train_unlabelOutDomain=os.path.join(featRoot, "train", "unlabel_out_of_domain", feat),
         #feat_train_weak="C:/Users/leo/Documents/Cours/M2/MasterThesis/Python/DCASE2018/features/features/train/weak/mel",
         normalizer=normalizer
     )
