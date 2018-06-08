@@ -75,8 +75,8 @@ class DCASE2018:
         # normalization
         if self.normalizer is not None:
             print("==== Normalization stage ====")
-            self.normalizer(self.trainingDataset["input"])
-            self.normalizer(self.validationDataset["input"])
+            self.trainingDataset["input"] = self.normalizer(self.trainingDataset["input"])
+            self.validationDataset["input"] = self.normalizer(self.validationDataset["input"])
 
         # extend dataset to have enough dim for conv2D
         self.trainingDataset["input"] = np.expand_dims(self.trainingDataset["input"], axis=-1)
@@ -114,7 +114,7 @@ class DCASE2018:
 
                 if os.path.isfile(path):
                     output = [0] * self.nbClass
-                    feature = np.load(path).T
+                    feature = np.load(path)
 
                     subset["input"].append(feature)
 
