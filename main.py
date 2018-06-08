@@ -10,6 +10,7 @@ import Normalizer
 import Metrics
 import CallBacks
 
+import sklearn.preprocessing as skp
 import random
 import numpy.random as npr
 from tensorflow import set_random_seed
@@ -32,13 +33,9 @@ if __name__ == '__main__':
     # PROCESS ARGUMENTS ====
     normalizer = None
     if args.normalizer:
-        if args.normalizer == "file_MinMax": normalizer = Normalizer.File_MinMaxNormalization
-        if args.normalizer == "global_MinMax": normalizer = Normalizer.Global_MinMaxNormalization
-        if args.normalizer == "file_Mean": normalizer = Normalizer.File_MeanNormalization
-        if args.normalizer == "global_Mean": normalizer = Normalizer.Global_MeanNormalization
-        if args.normalizer == "file_Standard": normalizer = Normalizer.File_Standardization
-        if args.normalizer == "global_Standard": normalizer = Normalizer.Global_Standardization
-        if args.normalizer == "unit": normalizer = Normalizer.UnitLength
+        if args.normalizer == "MinMax": normalizer = skp.MinMaxScaler()
+        if args.normalizer == "Standard": normalizer = skp.StandardScaler()
+        if args.normalizer == "MaxAbs": normalizer = skp.MaxAbsScaler()
 
     # Prepare the save directory (if needed)
     dirPath = None
@@ -88,22 +85,22 @@ if __name__ == '__main__':
     block1 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(kInput)
     block1 = BatchNormalization()(block1)
     block1 = Activation(activation="relu")(block1)
-    block1 = MaxPooling2D(pool_size=(1, 4))(block1)
+    block1 = MaxPooling2D(pool_size=(4, 1))(block1)
     block1 = Dropout(0.3)(block1)
 
     block2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(block1)
     block2 = BatchNormalization()(block2)
     block2 = Activation(activation="relu")(block2)
-    block2 = MaxPooling2D(pool_size=(1, 4))(block2)
+    block2 = MaxPooling2D(pool_size=(4, 1))(block2)
     block2 = Dropout(0.3)(block2)
 
     block3 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(block2)
     block3 = BatchNormalization()(block3)
     block3 = Activation(activation="relu")(block3)
-    block3 = MaxPooling2D(pool_size=(1, 4))(block3)
+    block3 = MaxPooling2D(pool_size=(4, 1))(block3)
     block3 = Dropout(0.3)(block3)
 
-    targetShape = dataset.originalShape[0]
+    targetShape = dataset.originalShape[1]
     reshape = Reshape(target_shape=(targetShape, 64))(block3)
 
     gru = Bidirectional(
