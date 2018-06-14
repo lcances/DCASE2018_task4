@@ -19,68 +19,87 @@ class DCASE2018:
         "blank": 10}
 
     def __init__(self,
-                 feat_train_weak: str = "", feat_train_unlabelInDomain: str = "", feat_train_unlabelOutDomain: str = "",
-                 meta_train_weak: str = "", meta_train_unlabelInDomain: str = "", meta_train_unlabelOutDomain: str = "",
-                 feat_test: str = "", meta_test: str = "", validationPercent: float = 0.2, nbClass: int = 10,
-                 nb_sequence: int = 1, normalizer = None):
+                 featureRoot: str, metaRoot: str, features: list,
+                 expandWithUod: bool = True,
+                 validationPercent: float = 0.2,
+                 normalizer = None):
 
         # directories
-        self.feat_train_weak = feat_train_weak
-        self.feat_train_uid = feat_train_unlabelInDomain
-        self.feat_train_uod = feat_train_unlabelOutDomain
-        self.feat_test = feat_test
-        self.meta_train_weak = meta_train_weak
-        self.meta_train_uid = meta_train_unlabelInDomain
-        self.meta_train_uod = meta_train_unlabelOutDomain
-        self.meta_test = meta_test
+        self.featureRoot = featureRoot
+        self.feat_train_weak = os.path.join(featureRoot, "train", "weak")
+        self.feat_train_uid = os.path.join(featureRoot, "train", "unlabel_in_domain")
+        self.feat_train_uod = os.path.join(featureRoot, "train", "unlabel_out_of_domain")
+        self.feat_test = os.path.join(featureRoot, "test")
+
+        # metadata
+        self.metaRoot = metaRoot
+        self.meta_train_weak = os.path.join(metaRoot, "weak.csv")
+        self.meta_train_uid = os.path.join(metaRoot, "unlabel_in_domain.csv")
+        self.meta_train_uod = os.path.join(metaRoot, "unlabel_out_of_domain.csv")
+        self.meta_test = os.path.join(metaRoot, "test.csv")
 
         # dataset parameters
-        self.metadata = {
+        self.features = features
+        self.metadata = {}
+        {
             "weak": [],
             "uid": [],
             "uod": [],
             "test": []
         }
 
+        self.expandWithUod = expandWithUod
         self.validationPercent = validationPercent
-        self.originalShape = None
+        self.originalShape = {}
         self.normalizer = normalizer
 
-        if self.meta_train_uod != "":
-            self.nbClass = nbClass + 1
-        else:
-            self.nbClass = nbClass
+        self.nbClass = 10
+        if expandWithUod:
+            self.nbClass = 11
 
         # dataset that will be used
-        self.nbSequence = nb_sequence
-        self.trainingDataset = {"input": [], "output": []}
-        self.validationDataset = {"input": [], "output": []}
-        self.testingDataset = {"input": [], "output": []}
+        self.trainingDataset = {}
+        self.validationDataset = {}
+        self.testingDataset = {}
 
-        # ==== initialize dataset ====
+        # ==== build dataset ====
+        self.__init()
         self.__loadMeta()
-        self.__createDataset()
-        self.__preProcessing()
+        self.__expand()
+        training_data, validation_data = self.__balancedSplit()
 
-    def __preProcessing(self):
+        for f in features:
+            self.__createDataset(f, training_data, validation_data)
+            self.__preProcessing(f)
+
+    def __init(self):
+        # init dict
+        for f in self.features:
+            self.trainingDataset[f] = {"input": [], "output": []}
+            self.validationDataset[f] = {"input": [], "output": []}
+            self.testingDataset[f] = {"input": [], "output": []}
+            self.originalShape[f] = None
+
+    def __preProcessing(self, feature: str):
         # save original shape
-        self.originalShape = self.trainingDataset["input"][0].shape
+        print(feature)
+        self.originalShape[feature] = self.trainingDataset[feature]["input"][0].shape
 
         # convert to np.array
-        self.trainingDataset["input"] = np.array(self.trainingDataset["input"])
-        self.validationDataset["input"] = np.array(self.validationDataset["input"])
-        self.trainingDataset["output"] = np.array(self.trainingDataset["output"])
-        self.validationDataset["output"] = np.array(self.validationDataset["output"])
+        self.trainingDataset[feature]["input"] = np.array(self.trainingDataset[feature]["input"])
+        self.validationDataset[feature]["input"] = np.array(self.validationDataset[feature]["input"])
+        self.trainingDataset[feature]["output"] = np.array(self.trainingDataset[feature]["output"])
+        self.validationDataset[feature]["output"] = np.array(self.validationDataset[feature]["output"])
 
         # normalization
         if self.normalizer is not None:
             print("==== Normalization stage ====")
-            self.trainingDataset["input"] = [self.normalizer.fit_transform(d) for d in self.trainingDataset["input"]]
-            self.validationDataset["input"] = [self.normalizer.fit_transform(d) for d in self.validationDataset["input"]]
+            self.trainingDataset[feature]["input"] = self.normalizer.fit_transform(self.trainingDataset[feature]["input"])
+            self.validationDataset[feature]["input"] = self.normalizer.fit_transform(self.validationDataset[feature]["input"])
 
         # extend dataset to have enough dim for conv2D
-        self.trainingDataset["input"] = np.expand_dims(self.trainingDataset["input"], axis=-1)
-        self.validationDataset["input"] = np.expand_dims(self.validationDataset["input"], axis=-1)
+        self.trainingDataset[feature]["input"] = np.expand_dims(self.trainingDataset[feature]["input"], axis=-1)
+        self.validationDataset[feature]["input"] = np.expand_dims(self.validationDataset[feature]["input"], axis=-1)
 
 
     def __loadMeta(self):
@@ -96,6 +115,7 @@ class DCASE2018:
                 else:
                     return [d.split("\t") for d in data[1:]][:nbFile]
 
+        # load meta data only on the first features (to keep the order)
         self.metadata["weak"] = load(self.meta_train_weak)
         self.metadata["uid"] = load(self.meta_train_uid)
         self.metadata["test"] = load(self.meta_test)
@@ -104,19 +124,55 @@ class DCASE2018:
         nbFileForUod = len(self.metadata["weak"]) * 0.2
         self.metadata["uod"] = load(self.meta_train_uod, int(nbFileForUod))
 
-    def __createDataset(self):
+    def __expand(self):
+        for f in self.metadata["weak"]:
+            f[0] = [self.featureRoot, "train", "weak", "feature", f[0]]
+        for f in self.metadata["uod"]:
+            f[0] = [self.featureRoot, "train", "unlabel_out_of_domain", "feature", f[0]]
+        self.metadata["weak"].extend(self.metadata["uod"])
+        self.metadata["weak"] = self.metadata["weak"]
 
-        def loadFeatures(subset: dict, toLoad: list, featDir: str):
-            subset["input"] = []
+    def __balancedSplit(self):
+        """ Split the weak subset into a balanced weak training and weak validation subsets"""
+        splited = [[] for i in range(self.nbClass)]
+
+        # separate the dataset into the 11 classes
+        for info in self.metadata["weak"]:
+            if len(info) > 1:
+                for cls in info[1].split(","):
+                    splited[DCASE2018.class_correspondance[cls.rstrip()]].append(info)
+            else:
+                splited[DCASE2018.class_correspondance["blank"]].append(info)
+
+        # for each class, split into two (80%, 20%) for training and validation
+        training = []
+        validation = []
+        for cls in splited:
+            cutIndex = int(len(cls) * self.validationPercent)
+            training.extend(cls[cutIndex:])
+            validation.extend(cls[:cutIndex])
+
+        # shuffle and load the features in memory
+        shuffle(training)
+        shuffle(validation)
+
+        return training, validation
+
+    def __createDataset(self, feature: str, training_data: list, validation_data: list):
+
+        def loadFeatures(subset: dict, toLoad: list):
+            subset[feature]["input"] = []
 
             for info in toLoad:
-                path = info[0]
+                pathList = info[0]
+                pathList[3] = feature
+                path = os.path.join(*info[0]) + ".npy"
 
                 if os.path.isfile(path):
                     output = [0] * self.nbClass
-                    feature = np.load(path)
+                    feat = np.load(path)
 
-                    subset["input"].append(feature)
+                    subset[feature]["input"].append(feat)
 
                     if len(info) > 1:
                         for cls in info[1].split(","):
@@ -124,63 +180,26 @@ class DCASE2018:
                     else:
                         output[DCASE2018.class_correspondance["blank"]] = 1
 
-                    subset["output"].append(output)
+                    subset[feature]["output"].append(output)
 
-        def balancedSplit():
-            """ Split the weak subset into a balanced weak training and weak validation subsets"""
-            splited = [[] for i in range(self.nbClass)]
+        loadFeatures(self.trainingDataset, training_data)
+        loadFeatures(self.validationDataset, validation_data)
 
-            # separate the dataset into the 11 classes
-            for info in self.metadata["weak"]:
-                if len(info) > 1:
-                    for cls in info[1].split(","):
-                        splited[DCASE2018.class_correspondance[cls.rstrip()]].append(info)
-                else:
-                    splited[DCASE2018.class_correspondance["blank"]].append(info)
-
-            # for each class, split into two (80%, 20%) for training and validation
-            training = []
-            validation = []
-            for cls in splited:
-                cutIndex = int(len(cls) * self.validationPercent)
-                training.extend(cls[cutIndex:])
-                validation.extend(cls[:cutIndex])
-
-            return training, validation
-
-        # convert basename to absolute path (needed for mixing both weak and uod dataset), and extend weak dataset
-        # only if dir is used
-        if self.meta_train_uod != "":
-            for info in self.metadata["weak"]:
-                info[0] = os.path.join(self.feat_train_weak, info[0] + ".npy")
-            for info in self.metadata["uod"]:
-                info[0] = os.path.join(self.feat_train_uod, info[0][:-1] + ".npy")
-
-            self.metadata["weak"].extend(self.metadata["uod"])
-
-        # split the weak subset into two classes wise evenly distributed
-        training_data, validation_data = balancedSplit()
-
-        # shuffle and load the features in memory
-        shuffle(training_data)
-        shuffle(validation_data)
-
-        loadFeatures(self.trainingDataset, training_data, self.feat_train_weak)
-        loadFeatures(self.validationDataset, validation_data, self.feat_train_weak)
-
-    def getInputShape(self):
-        shape = self.trainingDataset["input"][0].shape
+    def getInputShape(self, feature):
+        shape = self.trainingDataset[feature]["input"][0].shape
         return (shape[0], shape[1], 1)
 
     def __str__(self):
         output = "-" * 30 + "\n"
+        for f in self.features:
+            output += "Features: " + f + " --------\n\n"
 
-        output += "Using feature: " + os.path.basename(self.feat_train_weak) + "\n"
-        if self.meta_train_uod != "":
-            output += "Dataset has been augmented using the unlabel out of domain for \"blank\" class \n"
-            output += "%s files added\n\n" % len(self.metadata["uod"])
+            output += "Using feature: " + os.path.basename(self.feat_train_weak) + "\n"
+            if self.meta_train_uod != "":
+                output += "Dataset has been augmented using the unlabel out of domain for \"blank\" class \n"
+                output += "%s files added\n\n" % len(self.metadata["uod"])
 
-        output += "Training files: %s\nValidation files: %s\n" % (len(self.trainingDataset["input"]), len(self.validationDataset["input"]))
-        output += "Validation ratio: %s" % self.validationPercent
+            output += "Training files: %s\nValidation files: %s\n" % (len(self.trainingDataset[f]["input"]), len(self.validationDataset[f]["input"]))
+            output += "Validation ratio: %s" % self.validationPercent
 
         return output

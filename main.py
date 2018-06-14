@@ -2,7 +2,7 @@ import os
 
 import keras.utils
 from keras.layers import Reshape, BatchNormalization, Activation, MaxPooling2D, Conv2D, Dropout, GRU, Dense, \
-    Input, Bidirectional, TimeDistributed, GlobalAveragePooling1D
+    Input, Bidirectional, TimeDistributed, GlobalAveragePooling1D, Concatenate
 from keras.models import Model
 
 
@@ -57,15 +57,15 @@ if __name__ == '__main__':
     # GENERATE DATASET ====
     metaRoot = "meta"
     featRoot = "features_2"
-    feat = "mel"
+    feat = ["mel", "stack"]
     dataset = DCASE2018(
-        meta_train_weak=os.path.join(metaRoot, "weak.csv"),
-        meta_train_unlabelOutDomain=os.path.join(metaRoot, "unlabel_out_of_domain.csv"),
-        feat_train_weak=os.path.join(featRoot, "train", "weak", feat),
-        feat_train_unlabelOutDomain=os.path.join(featRoot, "train", "unlabel_out_of_domain", feat),
-        #feat_train_weak="C:/Users/leo/Documents/Cours/M2/MasterThesis/Python/DCASE2018/features/features/train/weak/mel",
+        featureRoot=featRoot,
+        metaRoot=metaRoot,
+        features=feat,
+        validationPercent=0.2,
         normalizer=normalizer
     )
+
     print(dataset)
 
     # MODEL HYPERPARAMETERS ====
@@ -75,40 +75,68 @@ if __name__ == '__main__':
     loss = "binary_crossentropy"
     optimizer = "adam"
     callbacks = [
-        CallBacks.CompleteLogger(logPath=dirPath, validation_data=(dataset.validationDataset["input"],
-                                                                   dataset.validationDataset["output"])
+        CallBacks.CompleteLogger(logPath=dirPath, validation_data=([dataset.validationDataset["mel"]["input"],
+                                                                    dataset.validationDataset["stack"]["input"]],
+                                                                   dataset.validationDataset["mel"]["output"])
                                  ),
     ]
 
     # ==================================================================================================================
     #   Creating the model
     # ==================================================================================================================
-    kInput = Input(dataset.getInputShape())
+    melInput = Input(dataset.getInputShape("mel"))
+    stackInput = Input(dataset.getInputShape("stack"))
 
-    block1 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(kInput)
-    block1 = BatchNormalization()(block1)
-    block1 = Activation(activation="relu")(block1)
-    block1 = MaxPooling2D(pool_size=(4, 1))(block1)
-    block1 = Dropout(0.3)(block1)
+    # ---- mel convolution part ----
+    mBlock1 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(melInput)
+    mBlock1 = BatchNormalization()(mBlock1)
+    mBlock1 = Activation(activation="relu")(mBlock1)
+    mBlock1 = MaxPooling2D(pool_size=(4, 1))(mBlock1)
+    mBlock1 = Dropout(0.3)(mBlock1)
 
-    block2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(block1)
-    block2 = BatchNormalization()(block2)
-    block2 = Activation(activation="relu")(block2)
-    block2 = MaxPooling2D(pool_size=(4, 1))(block2)
-    block2 = Dropout(0.3)(block2)
+    mBlock2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(mBlock1)
+    mBlock2 = BatchNormalization()(mBlock2)
+    mBlock2 = Activation(activation="relu")(mBlock2)
+    mBlock2 = MaxPooling2D(pool_size=(4, 1))(mBlock2)
+    mBlock2 = Dropout(0.3)(mBlock2)
 
-    block3 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(block2)
-    block3 = BatchNormalization()(block3)
-    block3 = Activation(activation="relu")(block3)
-    block3 = MaxPooling2D(pool_size=(4, 1))(block3)
-    block3 = Dropout(0.3)(block3)
+    mBlock3 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(mBlock2)
+    mBlock3 = BatchNormalization()(mBlock3)
+    mBlock3 = Activation(activation="relu")(mBlock3)
+    mBlock3 = MaxPooling2D(pool_size=(4, 1))(mBlock3)
+    mBlock3 = Dropout(0.3)(mBlock3)
 
-    targetShape = dataset.originalShape[1]
-    reshape = Reshape(target_shape=(targetShape, 64))(block3)
+    targetShape = int(mBlock3.shape[1] * mBlock3.shape[2])
+    mReshape = Reshape(target_shape=(targetShape, 64))(mBlock3)
+
+    # ---- stack convolution part ----
+    sBlock1 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(stackInput)
+    sBlock1 = BatchNormalization()(sBlock1)
+    sBlock1 = Activation(activation="relu")(sBlock1)
+    sBlock1 = MaxPooling2D(pool_size=(1, 2))(sBlock1)
+    sBlock1 = Dropout(0.3)(sBlock1)
+
+    sBlock2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(sBlock1)
+    sBlock2 = BatchNormalization()(sBlock2)
+    sBlock2 = Activation(activation="relu")(sBlock2)
+    sBlock2 = MaxPooling2D(pool_size=(1, 2))(sBlock2)
+    sBlock2 = Dropout(0.3)(sBlock2)
+
+    sBlock3 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(sBlock2)
+    sBlock3 = BatchNormalization()(sBlock3)
+    sBlock3 = Activation(activation="relu")(sBlock3)
+    sBlock3 = MaxPooling2D(pool_size=(1, 2))(sBlock3)
+    sBlock3 = Dropout(0.3)(sBlock3)
+
+    targetShape = int(sBlock3.shape[1] * sBlock3.shape[2])
+    sReshape = Reshape(target_shape=(targetShape, 64))(sBlock3)
+
+    # ---- concatenate ----
+    conc = Concatenate(axis=1)([mReshape, sReshape])
 
     gru = Bidirectional(
         GRU(kernel_initializer='glorot_uniform', recurrent_dropout=0.0, dropout=0.3, units=64, return_sequences=True)
-    )(reshape)
+    )(conc)
     print(gru.shape)
 
     output = TimeDistributed(
@@ -118,19 +146,19 @@ if __name__ == '__main__':
 
     output = GlobalAveragePooling1D()(output)
 
-    model = Model(inputs=kInput, outputs=output)
+    model = Model(inputs=[melInput, stackInput], outputs=output)
     keras.utils.print_summary(model, line_length=100)
 
     # compile & fit model
     model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
     model.fit(
-        x=dataset.trainingDataset["input"],
-        y=dataset.trainingDataset["output"],
+        x=[dataset.trainingDataset["mel"]["input"],dataset.trainingDataset["stack"]["input"]],
+        y=dataset.trainingDataset["mel"]["output"],
         epochs=epochs,
         batch_size=batch_size,
         validation_data=(
-            dataset.validationDataset["input"],
-            dataset.validationDataset["output"]
+            [dataset.validationDataset["mel"]["input"], dataset.validationDataset["stack"]["input"]],
+            dataset.validationDataset["mel"]["output"]
         ),
         callbacks=callbacks,
         verbose=0
