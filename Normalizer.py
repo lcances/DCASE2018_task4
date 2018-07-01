@@ -1,34 +1,143 @@
 import numpy as np
+from librosa import power_to_db
+
+class WrongShapeExeception(Exception):
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+
+class NotFitYet(Exception):
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+
+class MethodsDoesNotExist(Exception):
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
 
 
-def File_MinMaxNormalization(data: np.array) -> np.array:
-    """
-    Perform a Min Max normalization on each file independently.
-    :param data: N-dimension array to normalize
-    :return data: N-dimension array locally normalized
-    """
-    result = []
+class Scaler:
+    def __init__(self, methods: str = "local"):
+        self.methods = methods
 
-    for d in data:
-        maxi = d.max(axis=0)
-        mini = d.min(axis=0)
+    def fit(self, m: np.array):
+        raise NotImplementedError
 
-        result.append((d - mini) / (maxi - mini))
+    def transform(self, m: np.array) -> np.array:
+        raise NotImplementedError
 
-    return np.array(result)
+    def __2DTransform(self, m: np.array) -> np.array:
+        raise NotImplementedError
 
-def Global_MinMaxNormalization(data: np.array) -> np.array:
-    """
-    Perform a Min Max normalization of the whole dataset. The max and min are computed over the complete set of data
-    :param data: N-dimension array to normalize
-    :return data: N-dimension array globally normalized
-    """
-    maxi = data.max(axis=0)
-    mini = data.min(axis=0)
+    def __3DTransform(self, m: np.array) -> np.array:
+        raise NotImplementedError
 
-    data = (data - mini) / (maxi - mini)
+    def fit_transform(self, m: np.array) -> np.array:
+        raise NotImplementedError
 
-    return data
+
+
+
+class MinMaxScaler(Scaler):
+    def __init__(self, methods: str = "local"):
+        super().__init__(methods)
+        self.mini = []
+        self.maxi = []
+
+    def fit(self, m: np.array, force: bool = False):
+        if (self.maxi == [] and self.mini == []) or force:
+            if self.methods == "global":
+                self.mini = m.min(axis=1).min(axis=0)
+                self.maxi = m.max(axis=1).max(axis=0)
+
+            elif self.methods == "local":
+                self.mini = m.min(axis=0)
+                self.maxi = m.max(axis=0)
+
+            else:
+                raise MethodsDoesNotExist("Only available methods: \"global\" or \"local\"")
+
+    def transform(self, m: np.array) -> np.array:
+        if self.methods == "global": return self.__3DTransform(m)
+        elif self.methods == "local": return self.__2DTransform(m)
+        else:
+            raise MethodsDoesNotExist("Only available methods: \"global\" or \"local\"")
+
+    def fit_transform(self, m: np.array) -> np.array:
+        self.fit(m)
+        return self.transform(m)
+
+    def __3DTransform(self, m: np.array):
+        if self.mini == [] or self.maxi == []:
+            raise NotFitYet("Data haven't been fit yet, can't perform scaling")
+
+        if len(m.shape) != 3:
+            raise WrongShapeExeception("Matrix should be of dimension 3")
+
+        results = []
+
+        for d in m:
+            results.append( (d - self.mini) / (self.maxi - self.mini))
+
+        return np.array(results)
+
+    def __2DTransform(self, m: np.array):
+        results = []
+
+        for d in m:
+            results.append( (d - d.min(axis = 0)) / (d.max(axis = 0) - d.min(axis = 0)) )
+
+        return np.array(results)
+
+
+
+
+class MeanScaler(Scaler):
+    def __init__(self, methods: str = "local"):
+        super().__init__(methods)
+        self.mean = []
+
+    def fit(self, m: np.array, force: bool = False):
+        if self.mean == [] or force:
+            if self.methods == "global":
+                self.mean = m.mean(axis=1).mean(axis=0)
+
+            elif self.methods == "local":
+                self.mean = m.mean(axis=0)
+
+            else:
+                raise MethodsDoesNotExist("Only available methods: \"global\" or \"local\"")
+
+    def transform(self, m: np.array) -> np.array:
+        if self.methods == "global": return self.__3DTransform(m)
+        elif self.methods == "local": return self.__2DTransform(m)
+        else:
+            raise MethodsDoesNotExist("Only available methods: \"global\" or \"local\"")
+
+
+    def fit_transform(self, m: np.array) -> np.array:
+        self.fit(m)
+        return self.transform(m)
+
+    def __3DTransform(self, m: np.array):
+        if self.mean == []:
+            raise NotFitYet("Data haven't been fit yet, can't perform scaling")
+
+        if len(m.shape) != 3:
+            raise WrongShapeExeception("Matrix should be of dimension 3")
+
+        results = []
+
+        for d in m:
+            results.append(d - self.mean)
+
+        return np.array(results)
+
+    def __2DTransform(self, m: np.array):
+        results = []
+
+        for d in m:
+            results.append(d - d.mean(axis = 0))
+
+        return np.array(results)
 
 def File_MeanNormalization(data: np.array) -> np.array:
     """
@@ -58,6 +167,61 @@ def Global_MeanNormalization(data: np.array) -> np.array:
 
     return data
 
+
+
+
+class StandardScaler(Scaler):
+    def __init__(self, methods: str = "local"):
+        super().__init__(methods)
+        self.std = []
+        self.mean = []
+
+    def fit(self, m: np.array, force: bool = False):
+        if (self.mean == [] and self.std == []) or force:
+            if self.methods == "global":
+                self.mean = m.mean(axis=1).mean(axis=0)
+                self.std = m.std(axis=1).std(axis=0)
+
+            elif self.methods == "local":
+                self.mean = m.mean(axis=0)
+                self.std = m.std(axis=0)
+
+            else:
+                raise MethodsDoesNotExist("Only available methods: \"global\" or \"local\"")
+
+    def transform(self, m: np.array) -> np.array:
+        if self.methods == "global": return self.__3DTransform(m)
+        elif self.methods == "local": return self.__2DTransform(m)
+        else:
+            raise MethodsDoesNotExist("Only available methods: \"global\" or \"local\"")
+
+
+    def fit_transform(self, m: np.array) -> np.array:
+        self.fit(m)
+        return self.transform(m)
+
+    def __3DTransform(self, m: np.array):
+        if self.mean == []:
+            raise NotFitYet("Data haven't been fit yet, can't perform scaling")
+
+        if len(m.shape) != 3:
+            raise WrongShapeExeception("Matrix should be of dimension 3")
+
+        results = []
+
+        for d in m:
+            results.append((d - self.mean) / self.std)
+
+        return np.array(results)
+
+    def __2DTransform(self, m: np.array):
+        results = []
+
+        for d in m:
+            results.append((d - d.mean(axis = 0)) / d.std(axis=0))
+
+        return np.array(results)
+
 def File_Standardization(data: np.array) -> np.array:
     """
     Perform a file wise standardiztion
@@ -75,7 +239,6 @@ def File_Standardization(data: np.array) -> np.array:
 
     return np.array(result)
 
-
 def Global_Standardization(data: np.array) -> np.array:
     """
     Perform a standardization on the whole dataset
@@ -90,6 +253,25 @@ def Global_Standardization(data: np.array) -> np.array:
     return data
 
 
+class UnitScaler(Scaler):
+    def __init__(self, methods: str = "local"):
+        super().__init__(methods)
+
+    def fit(self, m: np.array, force: bool = False):
+        pass
+
+    def transform(self, m: np.array) -> np.array:
+        results = []
+
+        for d in m:
+            results.append(d / np.linalg.norm(d, ord=None, axis=0))
+
+        return np.array(results)
+
+    def fit_transform(self, m: np.array) -> np.array:
+        self.fit(m)
+        return self.transform(m)
+
 def UnitLength(data: np.array, order: int =None) -> np.array:
     result = []
 
@@ -98,27 +280,26 @@ def UnitLength(data: np.array, order: int =None) -> np.array:
 
     return np.array(result)
 
-if __name__=='__main__':
-    import random
 
-    dataset = []
-    for i in range(10):
-        dataset.append([random.randint(0, 10) for j in range(10)])
 
-    print("dataset =====")
-    print("mean: ", np.mean(dataset))
-    print("var: ", np.var(dataset))
-    print("max: ", np.max(dataset))
-    print("min: ", np.min(dataset))
 
-    print("File MinMax")
-    print(File_MinMaxNormalization(dataset))
-    print("")
+class LogScaler(Scaler):
+    def __init__(self, methods: str = "local"):
+        super().__init__(methods)
 
-    print("File Mean")
-    print(File_MeanNormalization(dataset))
-    print("")
+    def fit(self, m: np.array, force: bool = False):
+        pass
 
-    print("File_Standardization")
-    print(File_Standardization(dataset))
-    print("")
+    def transform(self, m: np.array) -> np.array:
+        results = []
+
+        for d in m:
+            results.append(power_to_db(d))
+
+        return np.array(results)
+
+    def fit_transform(self, m: np.array) -> np.array:
+        self.fit(m)
+        return self.transform(m)
+
+
