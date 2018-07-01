@@ -10,7 +10,6 @@ import Normalizer
 import Metrics
 import CallBacks
 
-import sklearn.preprocessing as skp
 import random
 import numpy.random as npr
 from tensorflow import set_random_seed
@@ -33,9 +32,13 @@ if __name__ == '__main__':
     # PROCESS ARGUMENTS ====
     normalizer = None
     if args.normalizer:
-        if args.normalizer == "MinMax": normalizer = skp.MinMaxScaler()
-        if args.normalizer == "Standard": normalizer = skp.StandardScaler()
-        if args.normalizer == "MaxAbs": normalizer = skp.MaxAbsScaler()
+        if args.normalizer == "file_MinMax": normalizer = Normalizer.MinMaxScaler()
+        if args.normalizer == "file_Mean": normalizer = Normalizer.MeanScaler()
+        if args.normalizer == "file_Standard": normalizer = Normalizer.StandardScaler()
+        if args.normalizer == "global_MinMax": normalizer = Normalizer.MinMaxScaler(methods="global")
+        if args.normalizer == "global_Mean": normalizer = Normalizer.MeanScaler(methods="global")
+        if args.normalizer == "global_Standard": normalizer = Normalizer.StandardScaler(methods="global")
+        if args.normalizer == "unit": normalizer = Normalizer.UnitLength()
 
     # Prepare the save directory (if needed)
     dirPath = None
