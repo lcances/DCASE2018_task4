@@ -1,35 +1,30 @@
 import os
+import argparse
 
 import keras.utils
-from keras.layers import Reshape, BatchNormalization, Activation, MaxPooling2D, Conv2D, Dropout, GRU, Dense, \
-    Input, Bidirectional, TimeDistributed, GlobalAveragePooling1D, Concatenate
+from keras.layers import Reshape, BatchNormalization, Activation, MaxPooling2D, Conv2D, Dropout, GRU, Dense
+from keras.layers import Input, Bidirectional, TimeDistributed, GlobalAveragePooling1D, Concatenate
 from keras.models import Model
-
-
-import Normalizer
-import Metrics
-import CallBacks
 
 import random
 import numpy.random as npr
 from tensorflow import set_random_seed
 
+import Normalizer
+import Metrics
+import CallBacks
 from datasetGenerator import DCASE2018
 
 if __name__ == '__main__':
-    # deactivate warning (TMP)
-    import warnings
-    warnings.filterwarnings("ignore")
-
-    # ARGUMENT PARSER ====
-    import argparse
-
+    # ==================================================================================================================
+    #       MANAGE PROGRAM ARGUMENTS
+    # ==================================================================================================================
     parser = argparse.ArgumentParser()
     parser.add_argument("--normalizer", help="normalizer [file_MinMax | global_MinMax | file_Mean | global_Mean | file_standard | global_standard | unit")
     parser.add_argument("--output_model", help="basename for save file of the model")
+    parser.add_argument("-w", help="If set, display the warnigs", action="store_true")
     args = parser.parse_args()
 
-    # PROCESS ARGUMENTS ====
     normalizer = None
     if args.normalizer:
         if args.normalizer == "file_MinMax": normalizer = Normalizer.MinMaxScaler()
@@ -40,7 +35,15 @@ if __name__ == '__main__':
         if args.normalizer == "global_Standard": normalizer = Normalizer.StandardScaler(methods="global")
         if args.normalizer == "unit": normalizer = Normalizer.UnitLength()
 
-    # Prepare the save directory (if needed)
+    if not args.w:
+        import warnings
+        warnings.filterwarnings("ignore")
+
+
+    # ==================================================================================================================
+    #       INITIALIZE THE PROGRAM AND PREPARE SAVE DIRECTORIES
+    # ==================================================================================================================
+    # prepare directory
     dirPath = None
     if args.output_model is not None:
         dirPath = args.output_model
@@ -48,7 +51,6 @@ if __name__ == '__main__':
         fileName = os.path.basename(dirPath)
 
         if not os.path.isdir(dirName):
-            print("File doesn't exist, creating it")
             os.makedirs(dirName)
 
     # fix the random seeds
@@ -57,10 +59,13 @@ if __name__ == '__main__':
     npr.seed(seed)
     set_random_seed(seed)
 
-    # GENERATE DATASET ====
-    metaRoot = "meta"
-    featRoot = "features_2"
-    feat = ["mel", "stack"]
+    # ==================================================================================================================
+    #       PREPARE DATASET AND SETUP MODEL HYPER PARAMETERS
+    # ==================================================================================================================
+    # prepare dataset
+    metaRoot = "../Corpus/DCASE2018/meta"
+    featRoot = "../Corpus/DCASE2018/features_2"
+    feat = ["mel"]
     dataset = DCASE2018(
         featureRoot=featRoot,
         metaRoot=metaRoot,
@@ -69,17 +74,14 @@ if __name__ == '__main__':
         normalizer=normalizer
     )
 
-    print(dataset)
-
-    # MODEL HYPERPARAMETERS ====
+    # hyperparameters
     epochs = 100
     batch_size = 12
     metrics = ["binary_accuracy", Metrics.precision, Metrics.recall, Metrics.f1]
     loss = "binary_crossentropy"
     optimizer = "adam"
     callbacks = [
-        CallBacks.CompleteLogger(logPath=dirPath, validation_data=([dataset.validationDataset["mel"]["input"],
-                                                                    dataset.validationDataset["stack"]["input"]],
+        CallBacks.CompleteLogger(logPath=dirPath, validation_data=(dataset.validationDataset["mel"]["input"],
                                                                    dataset.validationDataset["mel"]["output"])
                                  ),
     ]
@@ -88,7 +90,6 @@ if __name__ == '__main__':
     #   Creating the model
     # ==================================================================================================================
     melInput = Input(dataset.getInputShape("mel"))
-    stackInput = Input(dataset.getInputShape("stack"))
 
     # ---- mel convolution part ----
     mBlock1 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(melInput)
@@ -112,55 +113,28 @@ if __name__ == '__main__':
     targetShape = int(mBlock3.shape[1] * mBlock3.shape[2])
     mReshape = Reshape(target_shape=(targetShape, 64))(mBlock3)
 
-    # ---- stack convolution part ----
-    sBlock1 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(stackInput)
-    sBlock1 = BatchNormalization()(sBlock1)
-    sBlock1 = Activation(activation="relu")(sBlock1)
-    sBlock1 = MaxPooling2D(pool_size=(1, 2))(sBlock1)
-    sBlock1 = Dropout(0.3)(sBlock1)
-
-    sBlock2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(sBlock1)
-    sBlock2 = BatchNormalization()(sBlock2)
-    sBlock2 = Activation(activation="relu")(sBlock2)
-    sBlock2 = MaxPooling2D(pool_size=(1, 2))(sBlock2)
-    sBlock2 = Dropout(0.3)(sBlock2)
-
-    sBlock3 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(sBlock2)
-    sBlock3 = BatchNormalization()(sBlock3)
-    sBlock3 = Activation(activation="relu")(sBlock3)
-    sBlock3 = MaxPooling2D(pool_size=(1, 2))(sBlock3)
-    sBlock3 = Dropout(0.3)(sBlock3)
-
-    targetShape = int(sBlock3.shape[1] * sBlock3.shape[2])
-    sReshape = Reshape(target_shape=(targetShape, 64))(sBlock3)
-
-    # ---- concatenate ----
-    conc = Concatenate(axis=1)([mReshape, sReshape])
-
     gru = Bidirectional(
         GRU(kernel_initializer='glorot_uniform', recurrent_dropout=0.0, dropout=0.3, units=64, return_sequences=True)
-    )(conc)
-    print(gru.shape)
+    )(mReshape)
 
     output = TimeDistributed(
         Dense(dataset.nbClass, activation="sigmoid"),
     )(gru)
-    print(output.shape)
 
     output = GlobalAveragePooling1D()(output)
 
-    model = Model(inputs=[melInput, stackInput], outputs=output)
+    model = Model(inputs=[melInput], outputs=output)
     keras.utils.print_summary(model, line_length=100)
 
     # compile & fit model
     model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
     model.fit(
-        x=[dataset.trainingDataset["mel"]["input"],dataset.trainingDataset["stack"]["input"]],
+        x=dataset.trainingDataset["mel"]["input"],
         y=dataset.trainingDataset["mel"]["output"],
         epochs=epochs,
         batch_size=batch_size,
         validation_data=(
-            [dataset.validationDataset["mel"]["input"], dataset.validationDataset["stack"]["input"]],
+            dataset.validationDataset["mel"]["input"],
             dataset.validationDataset["mel"]["output"]
         ),
         callbacks=callbacks,
