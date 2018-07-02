@@ -20,7 +20,7 @@ class DCASE2018:
 
     def __init__(self,
                  featureRoot: str, metaRoot: str, features: list,
-                 expandWithUod: bool = True,
+                 expandWithUod: bool = False,
                  validationPercent: float = 0.2,
                  normalizer = None):
 
@@ -41,12 +41,6 @@ class DCASE2018:
         # dataset parameters
         self.features = features
         self.metadata = {}
-        {
-            "weak": [],
-            "uid": [],
-            "uod": [],
-            "test": []
-        }
 
         self.expandWithUod = expandWithUod
         self.validationPercent = validationPercent
@@ -62,15 +56,24 @@ class DCASE2018:
         self.validationDataset = {}
         self.testingDataset = {}
 
-        # ==== build dataset ====
+        # interior variables
+        self.build()
+
+
+    def __call__(self):
+        self.build()
+
+    def build(self):
         self.__init()
         self.__loadMeta()
         self.__expand()
         training_data, validation_data = self.__balancedSplit()
 
-        for f in features:
+        for f in self.features:
             self.__createDataset(f, training_data, validation_data)
             self.__preProcessing(f)
+
+        self._built = True
 
     def __init(self):
         # init dict
@@ -101,7 +104,6 @@ class DCASE2018:
         self.trainingDataset[feature]["input"] = np.expand_dims(self.trainingDataset[feature]["input"], axis=-1)
         self.validationDataset[feature]["input"] = np.expand_dims(self.validationDataset[feature]["input"], axis=-1)
 
-
     def __loadMeta(self):
         """ Load the metadata for all subset of the DCASE2018 task4 dataset"""
 
@@ -124,14 +126,19 @@ class DCASE2018:
         nbFileForUod = len(self.metadata["weak"]) * 0.2
         self.metadata["uod"] = load(self.meta_train_uod, int(nbFileForUod))
 
+        
+        
     def __expand(self):
         for f in self.metadata["weak"]:
             f[0] = [self.featureRoot, "train", "weak", "feature", f[0]]
-        for f in self.metadata["uod"]:
-            f[0] = [self.featureRoot, "train", "unlabel_out_of_domain", "feature", f[0]]
-        self.metadata["weak"].extend(self.metadata["uod"])
-        self.metadata["weak"] = self.metadata["weak"]
 
+        if self.expandWithUod:
+            for f in self.metadata["uod"]:
+                f[0] = [self.featureRoot, "train", "unlabel_out_of_domain", "feature", f[0]]
+            self.metadata["weak"].extend(self.metadata["uod"])
+
+            
+            
     def __balancedSplit(self):
         """ Split the weak subset into a balanced weak training and weak validation subsets"""
         splited = [[] for i in range(self.nbClass)]
