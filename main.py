@@ -112,9 +112,14 @@ if __name__ == '__main__':
 
     targetShape = int(mBlock3.shape[1] * mBlock3.shape[2])
     mReshape = Reshape(target_shape=(targetShape, 64))(mBlock3)
-    output = TimeDistributed(
-        Dense(dataset.nbClass, activation="sigmoid")
+
+    gru = Bidirectional(
+        GRU(kernel_initializer='glorot_uniform', recurrent_dropout=0.0, dropout=0.3, units=64, return_sequences=True)
     )(mReshape)
+
+    output = TimeDistributed(
+        Dense(dataset.nbClass, activation="sigmoid"),
+    )(gru)
 
     output = GlobalAveragePooling1D()(output)
 
