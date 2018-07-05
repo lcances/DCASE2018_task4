@@ -1,4 +1,8 @@
 """
+Binarizer is implemented under the form of a Singleton and therefore can be use between the different
+module and stage of the system without having to keep trace of it. The __new__ methods have been
+overwritten in order to always return the only one object that should be present.
+
 Allow the binarization of the prediction results using global thresholds or optimized one.
 These thresholds are set to 0.5 as default and can be optimized using AUC score
 """
@@ -61,7 +65,7 @@ class Binarizer(object):
             print("Can't binarize on a array of dimension different that 2 or 3")
             sys.exit(1)
 
-
+dd
     def __globalBinarization(self, predictionResult: np.array) -> np.array:
         output = []
         mappedScore = np.nan_to_num([self.thresholds[key] for key in self.thresholds])
