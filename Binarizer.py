@@ -65,7 +65,6 @@ class Binarizer(object):
             print("Can't binarize on a array of dimension different that 2 or 3")
             sys.exit(1)
 
-dd
     def __globalBinarization(self, predictionResult: np.array) -> np.array:
         output = []
         mappedScore = np.nan_to_num([self.thresholds[key] for key in self.thresholds])
