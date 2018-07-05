@@ -4,7 +4,6 @@ from random import shuffle
 import numpy as np
 
 class DCASE2018:
-    NB_CLASS = 11
     class_correspondance = {
         "Alarm_bell_ringing": 0,
         "Speech": 1,
@@ -41,12 +40,6 @@ class DCASE2018:
         # dataset parameters
         self.features = features
         self.metadata = {}
-        {
-            "weak": [],
-            "uid": [],
-            "uod": [],
-            "test": []
-        }
 
         self.expandWithUod = expandWithUod
         self.validationPercent = validationPercent
