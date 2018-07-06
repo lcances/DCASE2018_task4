@@ -4,18 +4,10 @@ from random import shuffle
 import numpy as np
 
 class DCASE2018:
-    class_correspondance = {
-        "Alarm_bell_ringing": 0,
-        "Speech": 1,
-        "Dog": 2,
-        "Cat": 3,
-        "Vacuum_cleaner": 4,
-        "Dishes": 5,
-        "Frying": 6,
-        "Electric_shaver_toothbrush": 7,
-        "Blender": 8,
-        "Running_water": 9,
-        "blank": 10}
+    CLIP_LENGTH = 10
+    NB_CLASS = 10
+    class_correspondance = {"Alarm_bell_ringing": 0, "Speech": 1, "Dog": 2, "Cat": 3, "Vacuum_cleaner": 4,
+        "Dishes": 5, "Frying": 6, "Electric_shaver_toothbrush": 7, "Blender": 8, "Running_water": 9}
 
     def __init__(self,
                  featureRoot: str, metaRoot: str, features: list,
@@ -47,8 +39,10 @@ class DCASE2018:
         self.normalizer = normalizer
 
         self.nbClass = 10
+        DCASE2018.NB_CLASS = 10
         if expandWithUod:
             self.nbClass = 11
+            DCASE2018.NB_CLASS = 11
 
         # dataset that will be used
         self.trainingDataset = {}
