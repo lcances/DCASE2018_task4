@@ -4,7 +4,7 @@ import argparse
 import os
 
 class DetailParser:
-    CLASSES = ["Alarm_bell_ringing", "Speech", "Dog", "Cat", "Vacuum_cleaner", "Dishes", "Frying", "Electric_shaver_toothbrush", "Blender", "Running_water", "blank"]
+    CLASSES = ["Alarm_bell_ringing", "Speech", "Dog", "Cat", "Vacuum_cleaner", "Dishes", "Frying", "Electric_shaver_toothbrush", "Blender", "Running_water"]
 
     @staticmethod
     def drawLine(high: float) -> tuple:
@@ -30,6 +30,7 @@ class DetailParser:
 
     @staticmethod
     def separate_classes(matrix: np.array) -> dict:
+        print("shape: ", matrix.shape)
         output = {}
 
         for i in range(len(DetailParser.CLASSES) - 1):
@@ -39,6 +40,7 @@ class DetailParser:
 
     @staticmethod
     def getFinalValue(matrix: np.array, epoch: int) -> list:
+        print("shape: ", matrix.shape)
         if epoch >= matrix.shape[0]:
             epoch = matrix.shape[0] - 1
 

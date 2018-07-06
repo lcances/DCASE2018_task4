@@ -9,6 +9,10 @@ class DCASE2018:
     class_correspondance = {"Alarm_bell_ringing": 0, "Speech": 1, "Dog": 2, "Cat": 3, "Vacuum_cleaner": 4,
         "Dishes": 5, "Frying": 6, "Electric_shaver_toothbrush": 7, "Blender": 8, "Running_water": 9}
 
+    class_correspondance_reverse = dict()
+    for k in class_correspondance:
+        class_correspondance_reverse[class_correspondance[k]] = k
+
     def __init__(self,
                  featureRoot: str, metaRoot: str, features: list,
                  expandWithUod: bool = False,

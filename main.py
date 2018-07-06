@@ -15,6 +15,20 @@ import Metrics
 import CallBacks
 from datasetGenerator import DCASE2018
 
+class CustomGRU(GRU):
+
+    def get_config(self):
+        print("getting configuration")
+        config = super().get_config()
+        config["temporal_weight"] = self.temporal_weight
+        print(config)
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        return super().from_config(config)
+
+
 if __name__ == '__main__':
     # ==================================================================================================================
     #       MANAGE PROGRAM ARGUMENTS

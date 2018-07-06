@@ -10,6 +10,7 @@ from datasetGenerator import DCASE2018
 import numpy as np
 import copy
 import sys
+from sklearn.metrics import recall_score, precision_score, f1_score
 
 
 class Binarizer(object):
@@ -34,12 +35,45 @@ class Binarizer(object):
             self.thresholds[key] = 0.5
 
 
-    def optimize(self, predictionResult: np.array):
-        """
-        Find the best thresholds for each classes using area under the curve and ROC curves
+    def optimize(self, y_true: np.array, predictionResult: np.array, method: str = "metrics"):
+        """ Find the best thresholds for each classes with different methods available.
+
+        methods available are
+            - "metrics" -> use the precision, recall and f1 score to set the "optimized thresholds"
+            - "auc" -> use the Aera Under the Curve methods to set the optimized thresholds
+
+        :param y_true: ground truth
         :param predictionResult: 2-dimension numpy array not binarized
+        :param method: methods to use for the threshold optimization: "metrics" | "auc"
         """
+        if method == "metrics": optimizer = self.__metricsOptimization
+        elif method == "auc": optimizer = self.__aucOptimization
+        else:
+            # TODO change sys.exit by raise
+            print("Can't binarize on a array of dimension different that 2 or 3")
+            sys.exit(1)
+
+        if self.optimized == True:
+            print("Binarizer was already optimized. Reseting the thresholds and perform new optimization")
+            self.resetOptimization()
+
+        optimizer(y_true, predictionResult)
         self.optimized = True
+
+    def __metricsOptimization(self, y_true: np.array , predictionResult: np.array):
+        binPrediction = self.binarize(predictionResult)
+
+        f1 = f1_score(y_true, binPrediction, average=None)
+        recall = recall_score(y_true, binPrediction, average=None)
+        precision = precision_score(y_true, binPrediction, average=None)
+
+        for cls in DCASE2018.class_correspondance:
+            index = DCASE2018.class_correspondance[cls]
+
+            self.thresholds[cls] = (f1[index] + recall[index] + precision[index]) / 3
+
+    def __aucOptimization(self, y_true: np.array, predictionResult: np.array):
+        pass
 
     def resetOptimization(self):
         """
@@ -55,13 +89,10 @@ class Binarizer(object):
         :param predictionResult: 2 or 3 dimensions numpy array not binarized
         :return: 2 or 3 dimension numpy array representing the binarized prediction
         """
-        if len(predictionResult.shape) == 2:
-            return self.__globalBinarization(predictionResult)
-
-        elif len(predictionResult.shape) == 3:
-            return self.__temporalBinarization(predictionResult)
-
+        if len(predictionResult.shape) == 2: return self.__globalBinarization(predictionResult)
+        elif len(predictionResult.shape) == 3: return self.__temporalBinarization(predictionResult)
         else:
+            # TODO change sys.exit by raise
             print("Can't binarize on a array of dimension different that 2 or 3")
             sys.exit(1)
 
