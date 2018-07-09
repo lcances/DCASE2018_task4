@@ -164,71 +164,94 @@ class Encoder:
         :param temporalPrediction: A 3-dimension numpy array (<nb clip>, <nb frame>, <nb class>)
         :return: The result of the system under the form of a strong annotation text where each represent on timed event
         """
-        prediction = temporalPrediction
-        stepLength = DCASE2018.CLIP_LENGTH / prediction.shape[1] * 1000     # in ms
-        temporalPrecision = 200        # ms
-        nbElementForPrecision = int(temporalPrecision / stepLength)
 
-        # retreive the parameters from **kwargs
-        rising = kwargs["rising"] if "rising" in kwargs.keys() else 0.5
-        decreasing = kwargs["decreasing"] if "decreasing" in kwargs.keys() else 0.5
-        high = kwargs["high"] if "high" in kwargs.keys() else 0.5
-        low = kwargs["low"] if "low" in kwargs.keys() else 0.5
-        flat = kwargs["float"] if "flat" in kwargs.keys() else 0.05
-        sensibility = kwargs["sensibility"] if "sensibility" in kwargs.keys() else 200
-        windows_size = kwargs["windows_size"] if "windows_size" in kwargs.keys() else nbElementForPrecision
-        middle = int(windows_size / 2)
+        def futureIsFlat(prediction: np.array, currentPos: int, flat: float = 0.05, window_size: int = 5) -> bool:
+            """
+            Detect what is following is "kinda" flat.
+            :param prediction: The prediction values of the current class
+            :param currentPos: The current position of the window (left side)
+            :return: True is the near future of the curve is flat, False otherwise
+            """
+            slopes = 0
+
+            # if not future possible (end of the curve)
+            if (currentPos + window_size) > len(prediction):
+                return False
+
+            # sum the slope value for the next <window_size> window
+            for i in range(currentPos, currentPos + window_size):
+                window = prediction[i:i+window_size]
+                slopes += window[-1] - window[0]
+
+            averageSlope = slopes / window_size
+
+            # is approximately flat, the return True, else False
+            return abs(averageSlope) < flat
+
+        # retreive the argument from kwargs
+        keys = kwargs.keys()
+        rising = kwargs["rising"] if "rising" in keys else 0.5
+        decreasing = kwargs["decreasing"] if "decreasing" in keys else -0.5
+        flat = kwargs["flat"] if "flat" in keys else 0.05
+        window_size = kwargs["window_size"] if "window_size" in keys else 5
+        high = kwargs["high"] if "high" in keys else 0.5
 
         output = []
 
-        for clip in prediction:
+        for clip in temporalPrediction:
+            cls = 0
             labeled = dict()
 
-            cls = 0
-            cpt = 0
-            isFlat = False
-            nbFlat = 0
-            nbSegment = 1
-            low = False
             for predictionPerClass in clip.T:
-                converted = []
 
-                for i in range(len(predictionPerClass) - windows_size):
-                    windows = predictionPerClass[i:i+windows_size]
-                    slope = (windows[-1] - windows[0]) / (len(windows))
-                    middleValue = windows[middle]
+                nbSegment = 1
+                segments = []
+                segment = [0.0, 0]
+                for i in range(len(predictionPerClass) - window_size):
+                    window = predictionPerClass[i:i+window_size]
 
+                    slope = window[-1] - window[0]
+
+                    # first element
                     if i == 0:
-                        segment = [1.0, 1] if middleValue > high else [0.0, 1]
+                        segment = [1.0, 1] if window[0] > high else [0.0, 1]
 
-                    # is signal is kinda flat (rising or decreasing)
-                    if abs(slope) < flat:
-                        nbFlat += 1
-
-                        # If "signal" is flat and it was decreasing then "Flat after decrease" -> end segment
-                        if nbFlat > len(windows) and segment[0] == 0.0:
-                            converted.append(segment)
-                            nbSegment += 1
-                            segment = [0.0, 1]
-
-                    if slope > rising and segment[0] == 1:
-                        segment[1] += 1
-                        nbFlat = 0
-
-
-                    elif slope > rising and segment[0] != 1:
-                        converted.append(segment)
+                    # rising slope while on "low" segment --> changing segment
+                    if slope > rising and segment[0] == 0:
+                        segments.append(segment)
                         nbSegment += 1
                         segment = [1.0, 1]
 
-                    elif slope <= decreasing and segment[0] == 0:
-                        nbSegment[1] += 1
-                        nbFlat = 0
+                    # rising slope while on "high" segment --> same segment
+                    elif slope > rising and segment[0] == 1:
+                        segment[1] += 1
 
-                labeled[cls] = copy.copy(converted)
+                    # decreasing slope while on "low" segment --> same segment
+                    elif slope < decreasing and segment[0] == 0:
+                        segment[1] += 1
+
+                    # decreasing slope while on "high" segment --> one extra condition, future is flat ?
+                    elif slope < decreasing and segment[0] == 1:
+                        # is there is no flat plateau right after --> same segment
+                        if not futureIsFlat(predictionPerClass, i, flat, window_size):
+                            segment[1] += 1
+
+                        # Otherwise --> change segment
+                        else:
+                            segments.append(segment)
+                            nbSegment += 1
+                            segment = [0.0, 1]
+
+                if nbSegment == 1:
+                    segments.append(copy.copy(segment))
+
+                labeled[cls] = segments
+                cls += 1
+
             output.append(labeled)
-
         return output
+
+
 
     def parse(self, allSegments: list, testFilesName: list) -> str:
         output = ""
@@ -241,7 +264,7 @@ class Encoder:
                 for segment in clip[cls]:
                     if segment[0] == 1.0:
                         output += "%s\t%f\t%f\t%s\n" % (
-                            testFilesName[clipIndex][:-4],
+                            testFilesName[clipIndex],
                             start * self.frameLength,
                             (start + segment[1]) * self.frameLength,
                             DCASE2018.class_correspondance_reverse[cls]
@@ -271,11 +294,10 @@ if __name__=='__main__':
         prediction = np.array(prediction)
 
         #o = e.encode(prediction)       # basic thresold with hold filling
-        o = e.encode(prediction, method="hysteresis", low=0.4, high=0.6)
+        o = e.encode(prediction, method="derivative")
         for k in o:
-            print(len(k[0]) , k[0])
+            print(len(k[0]), k[0])
         t = e.parse(o, prediction[:,0,0])
-        print(t)
 
 
     fakeTemporalPrediction()
