@@ -348,6 +348,13 @@ class Encoder:
         return output
 
     def parse(self, allSegments: list, testFilesName: list) -> str:
+        """ Transform a list of segment into a txt file ready for evaluation.
+
+        :param allSegments: a list of dict of 10 key. the list length is equal to the number of file, the dict number
+        of key to the number of class
+        :param testFilesName: the list of filename in the same order than the list allSegments
+        :return: a str file ready for evaluation using dcase_util evaluation_measure.py
+        """
         output = ""
 
         for clipIndex in range(len(allSegments)):
