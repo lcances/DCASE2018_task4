@@ -26,6 +26,38 @@ class Encoder:
 
         return output
 
+    def binToClass(self, prediction: np.array, binarize: bool = False) -> np.array:
+        """ Given the prediction output of the network, match the results to the class name.
+
+        Usefull in the case of labelisation (for unlabel_in_domain)
+        :param prediction: a 2 dimension numpy array, result of the prediction of the model
+        :param binarize: If the prediction need to be binarized first.
+        :return the prediction list with the class name instaed if the class number
+        """
+        output = []
+
+        if binarize:
+            b = Binarizer()
+            prediction = b.binarize(prediction)
+
+        for pred in prediction:
+            nbpredict = 0
+
+            label = ""
+            for i in range(len(pred)):
+                isPredict = pred[i]
+
+                if isPredict == 1:
+                    label += "%s," % DCASE2018.class_correspondance_reverse[i]
+                    nbpredict += 1
+
+            if nbpredict > 0:
+                output.append(label[:-1])
+            else:
+                output.append(label)
+
+        return np.array(output)
+
     def encode(self, temporalPrediction: np.array, method: str = "threshold", **kwargs) -> str:
         """
         Perform the localization of the sound event present in the file.
