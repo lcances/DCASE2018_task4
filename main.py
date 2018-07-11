@@ -1,33 +1,33 @@
 import os
 import argparse
 
-import keras.utils
-from keras.layers import Reshape, BatchNormalization, Activation, MaxPooling2D, Conv2D, Dropout, GRU, Dense
-from keras.layers import Input, Bidirectional, TimeDistributed, GlobalAveragePooling1D, Concatenate
-from keras.models import Model
 
 import random
 import numpy.random as npr
+import numpy as np
 from tensorflow import set_random_seed
 
+
+import Models
 import Normalizer
 import Metrics
+from Binarizer import Binarizer
+from Encoder import Encoder
 import CallBacks
 from datasetGenerator import DCASE2018
 
-class CustomGRU(GRU):
 
-    def get_config(self):
-        print("getting configuration")
-        config = super().get_config()
-        config["temporal_weight"] = self.temporal_weight
-        print(config)
-        return config
+def modelAlreadyTrained(modelPath: str) -> bool:
+    print(modelPath)
+    print(modelPath + "_model.json")
+    print("MODEL PATH: ", os.path.isfile(modelPath + "_model.json"))
+    if not os.path.isfile(modelPath + "_model.json"):
+        return False
 
-    @classmethod
-    def from_config(cls, config):
-        return super().from_config(config)
+    if not os.path.isfile(modelPath + "_weight.h5py"):
+        return False
 
+    return True
 
 if __name__ == '__main__':
     # ==================================================================================================================
@@ -73,10 +73,10 @@ if __name__ == '__main__':
     npr.seed(seed)
     set_random_seed(seed)
 
+
     # ==================================================================================================================
-    #       PREPARE DATASET AND SETUP MODEL HYPER PARAMETERS
+    #       PREPARE DATASET
     # ==================================================================================================================
-    # prepare dataset
     metaRoot = "../Corpus/DCASE2018/meta"
     featRoot = "../Corpus/DCASE2018/features_2"
     feat = ["mel"]
@@ -88,6 +88,11 @@ if __name__ == '__main__':
         normalizer=normalizer
     )
 
+
+    # ==================================================================================================================
+    #       Build mode & prepare hyper parameters & train
+    #           - if not already done
+    # ==================================================================================================================
     # hyperparameters
     epochs = 100
     batch_size = 12
@@ -100,67 +105,113 @@ if __name__ == '__main__':
                                  ),
     ]
 
-    # ==================================================================================================================
-    #   Creating the model
-    # ==================================================================================================================
-    melInput = Input(dataset.getInputShape("mel"))
-
-    # ---- mel convolution part ----
-    mBlock1 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(melInput)
-    mBlock1 = BatchNormalization()(mBlock1)
-    mBlock1 = Activation(activation="relu")(mBlock1)
-    mBlock1 = MaxPooling2D(pool_size=(4, 1))(mBlock1)
-    mBlock1 = Dropout(0.3)(mBlock1)
-
-    mBlock2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(mBlock1)
-    mBlock2 = BatchNormalization()(mBlock2)
-    mBlock2 = Activation(activation="relu")(mBlock2)
-    mBlock2 = MaxPooling2D(pool_size=(4, 1))(mBlock2)
-    mBlock2 = Dropout(0.3)(mBlock2)
-
-    mBlock3 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(mBlock2)
-    mBlock3 = BatchNormalization()(mBlock3)
-    mBlock3 = Activation(activation="relu")(mBlock3)
-    mBlock3 = MaxPooling2D(pool_size=(4, 1))(mBlock3)
-    mBlock3 = Dropout(0.3)(mBlock3)
-
-    targetShape = int(mBlock3.shape[1] * mBlock3.shape[2])
-    mReshape = Reshape(target_shape=(targetShape, 64))(mBlock3)
-
-    gru = Bidirectional(
-        GRU(kernel_initializer='glorot_uniform', recurrent_dropout=0.0, dropout=0.3, units=64, return_sequences=True)
-    )(mReshape)
-
-    output = TimeDistributed(
-        Dense(dataset.nbClass, activation="sigmoid"),
-    )(gru)
-
-    output = GlobalAveragePooling1D()(output)
-
-    model = Model(inputs=[melInput], outputs=output)
-    keras.utils.print_summary(model, line_length=100)
+    model = Models.crnn_mel64_tr2(dataset)
 
     # compile & fit model
-    model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
-    model.fit(
-        x=dataset.trainingDataset["mel"]["input"],
-        y=dataset.trainingDataset["mel"]["output"],
-        epochs=epochs,
-        batch_size=batch_size,
-        validation_data=(
-            dataset.validationDataset["mel"]["input"],
-            dataset.validationDataset["mel"]["output"]
-        ),
-        callbacks=callbacks,
-        verbose=0
-    )
+    if not modelAlreadyTrained(dirPath):
+        model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
+        model.fit(
+            x=dataset.trainingDataset["mel"]["input"],
+            y=dataset.trainingDataset["mel"]["output"],
+            epochs=epochs,
+            batch_size=batch_size,
+            validation_data=(
+                dataset.validationDataset["mel"]["input"],
+                dataset.validationDataset["mel"]["output"]
+            ),
+            callbacks=callbacks,
+            verbose=0
+        )
 
-    # save json
-    model_json = model.to_json()
-    with open(dirPath + "_model.json", "w") as f:
-        f.write(model_json)
+        # save model ----------
+        model_json = model.to_json()
+        with open(dirPath + "_model.json", "w") as f:
+            f.write(model_json)
 
-    # save weight
-    model.save_weights(dirPath + "_weight.h5py")
+        # save weight
+        model.save_weights(dirPath + "_weight.h5py")
+
+    else:
+        print("Model already build and train, loading ...")
+        model = Models.load(dirPath)
+
+
+    # ==================================================================================================================
+    #   Extend original weak dataset by predicting unlabel_in_domain
+    # ==================================================================================================================
+    print("==== PREDICT UNLABEL_IN_DOMAIN ====")
+    featurePath = dict()
+    featureFiles = dict()
+    features = dict()
+
+    for f in feat:
+        featurePath[f] = os.path.join(featRoot, "train", "unlabel_in_domain", f)
+        featureFiles[f] = os.listdir(featurePath[f])
+        features[f] = []
+
+    # predict the unlabel_in_domain 1000 by 1000 (memory usage limitation 1000 ~= 230 Mo)
+    nbFileToPredict = 1000
+    binarizer = Binarizer()
+    encoder = Encoder()
+    with open(os.path.join(metaRoot, "unlabel_in_domain_semi.csv"), "w") as metaFile:
+        for i in range(0, len(featureFiles[feat[0]]) - nbFileToPredict, nbFileToPredict):
+            toLoad = dict()
+
+            for f in feat:
+                toLoad[f] = featureFiles[f][i:i+nbFileToPredict]
+
+            # retrieve the features (already extracted)
+            featureLoaded = dict()
+            for f in feat:
+                featureLoaded[f] = []
+
+            for j in range(nbFileToPredict):
+                for f in feat:
+                    feature = np.load(os.path.join(featurePath[f], toLoad[f][j]))
+
+                    # pre processing
+                    feature = np.expand_dims(feature, axis=-1)
+
+                    featureLoaded[f].append(feature)
+
+            # predict the <nbFileToPredict> files loaded in memory
+            toPredictList = [featureLoaded[f] for f in feat]
+            prediction = model.predict(toPredictList)
+            binPrediction = binarizer.binarize(prediction)
+            binPredictionCls = encoder.binToClass(binPrediction)
+
+            # write the new metadata for unlabel_in_domain newly annotated
+            unlabelInDomainWeakMeta = ""
+            for k in range(nbFileToPredict):
+                fileName = toLoad[feat[0]][k]
+                unlabelInDomainWeakMeta += "%s %s\n" % (fileName, binPredictionCls[k])
+
+            # save the new metadata file
+            print("Saving results %s to %s" % (i, i+nbFileToPredict))
+            metaFile.write(unlabelInDomainWeakMeta)
+
+    # TODO DEBUG UNTIL THERE
+    # TODO DEBUG UNTIL THERE
+    # TODO DEBUG UNTIL THERE
+    # TODO DEBUG UNTIL THERE
+    # TODO DEBUG UNTIL THERE
+    # TODO DEBUG UNTIL THERE
+    # TODO DEBUG UNTIL THERE
+    # TODO DEBUG UNTIL THERE
+    # TODO DEBUG UNTIL THERE
+    # TODO DEBUG UNTIL THERE
+    # TODO DEBUG UNTIL THERE
+    # TODO DEBUG UNTIL THERE
+    # TODO DEBUG UNTIL THERE
+    # TODO DEBUG UNTIL THERE
+
+
+
+
+
+
+
+
+
 
 
