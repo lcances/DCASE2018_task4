@@ -1,11 +1,13 @@
 import os
 import argparse
 
+from sklearn.metrics import precision_score, recall_score, f1_score
 
 import random
 import numpy.random as npr
 import numpy as np
 from tensorflow import set_random_seed
+from keras.optimizers import Adam
 
 
 import Models
@@ -89,6 +91,7 @@ if __name__ == '__main__':
     )
 
 
+
     # ==================================================================================================================
     #       Build mode & prepare hyper parameters & train
     #           - if not already done
@@ -98,7 +101,8 @@ if __name__ == '__main__':
     batch_size = 12
     metrics = ["binary_accuracy", Metrics.precision, Metrics.recall, Metrics.f1]
     loss = "binary_crossentropy"
-    optimizer = "adam"
+    optimizer = Adam()
+    print("default lr: ", optimizer.lr)
     callbacks = [
         CallBacks.CompleteLogger(logPath=dirPath, validation_data=(dataset.validationDataset["mel"]["input"],
                                                                    dataset.validationDataset["mel"]["output"])
@@ -136,6 +140,8 @@ if __name__ == '__main__':
         model = Models.load(dirPath)
 
 
+
+
     # ==================================================================================================================
     #   Extend original weak dataset by predicting unlabel_in_domain
     # ==================================================================================================================
@@ -150,9 +156,24 @@ if __name__ == '__main__':
         features[f] = []
 
     # predict the unlabel_in_domain 1000 by 1000 (memory usage limitation 1000 ~= 230 Mo)
+    # Each time, retrain model (transfer learning) and save model. Keep only the best model
+    # Model are evaluate on their classification score (F1)
+    # TODO evaluate also on the localization score
     nbFileToPredict = 1000
     binarizer = Binarizer()
     encoder = Encoder()
+
+    # save original model and keep track of the best one.
+    prediction = model.predict(dataset.validationDataset[feat[0]]["input"])
+    prediction[prediction > 0.5] = 1        # TODO Change by binarizer
+    prediction[prediction < 0.5] = 0        # TODO change by binarizer
+    precision = f1_score(dataset.validationDataset[feat[0]]["output"], prediction, average=None)
+
+    best = {
+        "original weight": model.get_weights(), "original average f1": precision.mean(),
+        "transfer weight": model.get_weights(), "transfer average f1": precision.mean()
+    }
+
     with open(os.path.join(metaRoot, "unlabel_in_domain_semi.csv"), "w") as metaFile:
         for i in range(0, len(featureFiles[feat[0]]) - nbFileToPredict, nbFileToPredict):
             toLoad = dict()
@@ -182,36 +203,57 @@ if __name__ == '__main__':
 
             # write the new metadata for unlabel_in_domain newly annotated
             unlabelInDomainWeakMeta = ""
+            labels = []
             for k in range(nbFileToPredict):
                 fileName = toLoad[feat[0]][k]
                 unlabelInDomainWeakMeta += "%s %s\n" % (fileName, binPredictionCls[k])
+                labels.append(binPredictionCls[k].split(","))
 
             # save the new metadata file
             print("Saving results %s to %s" % (i, i+nbFileToPredict))
             metaFile.write(unlabelInDomainWeakMeta)
 
-    # TODO DEBUG UNTIL THERE
-    # TODO DEBUG UNTIL THERE
-    # TODO DEBUG UNTIL THERE
-    # TODO DEBUG UNTIL THERE
-    # TODO DEBUG UNTIL THERE
-    # TODO DEBUG UNTIL THERE
-    # TODO DEBUG UNTIL THERE
-    # TODO DEBUG UNTIL THERE
-    # TODO DEBUG UNTIL THERE
-    # TODO DEBUG UNTIL THERE
-    # TODO DEBUG UNTIL THERE
-    # TODO DEBUG UNTIL THERE
-    # TODO DEBUG UNTIL THERE
-    # TODO DEBUG UNTIL THERE
+            # Retrain the model and check if better than previous one
+            newOutput = []
+            for label in labels:
 
+                output = [0] * 10
+                for l in label:
+                    if l != "":
+                        output[DCASE2018.class_correspondance[l]] = 1
+                newOutput.append(output)
+            newOutput = np.array(newOutput)
 
+            optimizer.lr = 0.00001  # 100 times smaller
+            model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
+            model.fit(
+                x=[np.array(featureLoaded[feat[0]])],
+                y=newOutput,
+                epochs=80,
+                validation_data=(
+                    dataset.validationDataset["mel"]["input"],
+                    dataset.validationDataset["mel"]["output"]
+                ),
+                batch_size=batch_size,
+                callbacks=callbacks,
+                verbose=0
+            )
 
+            print("PREDICTION\n\n\n")
+            prediction = model.predict(dataset.validationDataset[feat[0]]["input"])
+            prediction[prediction > 0.5] = 1        # TODO use binarizer
+            prediction[prediction < 0.5] = 0        # TODO use binarizer
+            print("\n\n\nSCORE\n\n\n")
+            precision = f1_score(dataset.validationDataset[feat[0]]["output"], prediction, average=None)
+            print("original: %.5f <--> %.5f transfer" % (best["original average f1"], precision.mean()) )
 
+            # save model if better
+            if precision.mean() > best["transfer average f1"]:
+                best["transfer average f1"] = precision.mean()
+                best["transfer weight"] = model.get_weights()
 
-
-
-
-
-
+    print("TRANSFER LEARNING FINISH !!!!!!")
+    print("F1 score")
+    print("original: ", best["original average f1"])
+    print("tranfer: ", best["transfer average f1"])
 
