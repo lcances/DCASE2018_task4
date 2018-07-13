@@ -1,5 +1,6 @@
 task4/audio/
 task4/features/
+presentation/
 *.sh
 a.py
 .idea/
