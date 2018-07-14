@@ -2,6 +2,7 @@ import os
 from random import shuffle
 
 import numpy as np
+from keras.utils import Sequence
 
 class DCASE2018:
     CLIP_LENGTH = 10

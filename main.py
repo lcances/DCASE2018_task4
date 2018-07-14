@@ -31,6 +31,7 @@ def modelAlreadyTrained(modelPath: str) -> bool:
 
     return True
 
+
 if __name__ == '__main__':
     # ==================================================================================================================
     #       MANAGE PROGRAM ARGUMENTS
@@ -127,13 +128,7 @@ if __name__ == '__main__':
             verbose=0
         )
 
-        # save model ----------
-        model_json = model.to_json()
-        with open(dirPath + "_model.json", "w") as f:
-            f.write(model_json)
-
-        # save weight
-        model.save_weights(dirPath + "_weight.h5py")
+        Models.save(dirPath, model)
 
     else:
         print("Model already build and train, loading ...")
@@ -165,8 +160,9 @@ if __name__ == '__main__':
 
     # save original model and keep track of the best one.
     prediction = model.predict(dataset.validationDataset[feat[0]]["input"])
-    prediction[prediction > 0.5] = 1        # TODO Change by binarizer
-    prediction[prediction < 0.5] = 0        # TODO change by binarizer
+    binPrediction = binarizer.binarize(prediction)
+    # prediction[prediction > 0.5] = 1        # TODO Change by binarizer
+    # prediction[prediction < 0.5] = 0        # TODO change by binarizer
     precision = f1_score(dataset.validationDataset[feat[0]]["output"], prediction, average=None)
 
     best = {
