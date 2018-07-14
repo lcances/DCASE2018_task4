@@ -3,17 +3,12 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 
 import time
 import os
-import numpy as np
 from datasetGenerator import DCASE2018
+from Binarizer import Binarizer
 
-"""
-{'batch_size': 8, 'epochs': 200, 'steps': None, 'samples': 1237, 'verbose': 0, 'do_validation': True, 'metrics': ['loss', 'binary_accuracy', 'precision', 'recall', 'f1', 'val_loss', 'val_binary_accuracy', 'val_precision', 'val_recall', 'val_f1']}
-starting
-
-"""
 
 class CompleteLogger(Callback):
-    def __init__(self, logPath:str, validation_data: tuple):
+    def __init__(self, logPath: str, validation_data: tuple, history_size: int = 3):
         super().__init__()
 
         self.validation_input = validation_data[0]
@@ -30,6 +25,11 @@ class CompleteLogger(Callback):
         self.currentEpoch = 0
         self.epochStart = 0
         self.epochDuration = 0
+
+        self.history_size = history_size
+        self.history = []       # a history of the best models
+
+        self.binarizer = Binarizer()
 
     def on_train_begin(self, logs=None):
         super().on_train_begin(logs)
@@ -68,6 +68,7 @@ class CompleteLogger(Callback):
         self.epochDuration = time.time() - self.epochStart
 
         self.__computeMetrics()
+        self.__toHistory()
 
         self.__printMetrics(logs, validation=True, overwrite=False)
         self.__logGeneralEpoch(logs)
@@ -81,16 +82,30 @@ class CompleteLogger(Callback):
 
         # calc metrics for each classes separately
         prediction = self.model.predict(self.validation_input)
-        self.__applyThreshold(prediction)
-        precision = precision_score(self.validation_output, prediction, average=None)
-        recall = recall_score(self.validation_output, prediction, average=None)
-        f1 = f1_score(self.validation_output, prediction, average=None)
+        prediction = self.binarizer.binarize(prediction)
 
-        return precision, recall, f1
+        self.precision = precision_score(self.validation_output, prediction, average=None)
+        self.recall = recall_score(self.validation_output, prediction, average=None)
+        self.f1 = f1_score(self.validation_output, prediction, average=None)
 
-    def __applyThreshold(self, prediction: np.array):
-        prediction[prediction > 0.5] = 1
-        prediction[prediction < 0.5] = 0
+
+    # ==================================================================================================================
+    #       LOG FUNCTIONS
+    # ==================================================================================================================
+    def __toHistory(self):
+        average_f1 = self.f1.mean()
+
+        # add the current model to the list of history
+        self.history.append( {"weights": self.model.get_weights(), "average f1": average_f1} )
+
+        # sort the list using the average f1 key
+        self.history = sorted(self.history_size, key=lambda k: k['average f1'])
+
+        # keep only the <history_size> first
+        self.history = self.history[:self.history_size]
+
+
+
 
     # ==================================================================================================================
     #       LOG FUNCTIONS
@@ -166,11 +181,9 @@ class CompleteLogger(Callback):
             return ",".join(map(str, line))
 
         if self.logging:
-            precision, recall, f1 = self.__computeMetrics()
-
-            self.logFile["precision"].write(str(self.currentEpoch) + "," + convertToCSV(precision) + "\n")
-            self.logFile["recall"].write(str(self.currentEpoch) + "," + convertToCSV(recall) + "\n")
-            self.logFile["f1"].write(str(self.currentEpoch) + "," + convertToCSV(f1) + "\n")
+            self.logFile["precision"].write(str(self.currentEpoch) + "," + convertToCSV(self.precision) + "\n")
+            self.logFile["recall"].write(str(self.currentEpoch) + "," + convertToCSV(self.recall) + "\n")
+            self.logFile["f1"].write(str(self.currentEpoch) + "," + convertToCSV(self.f1) + "\n")
 
     # ==================================================================================================================
     #       DISPLAY FUNCTIONS
