@@ -12,6 +12,18 @@ def load(dirPath: str) -> Model:
 
     return model
 
+def save(dirPath: stri, transfer: bool = False):
+    # save model ----------
+    model_json = model.to_json()
+    with open(dirPath + "_model.json", "w") as f:
+        f.write(model_json)
+
+    # save weight
+    model.save_weights(dirPath + "_weight.h5py")
+
+    if transfer:
+        open(dirPath + "_transfer", "w").write("")
+
 def crnn_mel64_tr2(dataset: DCASE2018) -> Model:
     melInput = Input(dataset.getInputShape("mel"))
 
