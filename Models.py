@@ -12,7 +12,7 @@ def load(dirPath: str) -> Model:
 
     return model
 
-def save(dirPath: stri, transfer: bool = False):
+def save(dirPath: str, model: Model, transfer: bool = False):
     # save model ----------
     model_json = model.to_json()
     with open(dirPath + "_model.json", "w") as f:
