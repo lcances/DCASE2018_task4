@@ -252,6 +252,14 @@ if __name__ == '__main__':
                 best["transfer average f1"] = precision.mean()
                 best["transfer weight"] = model.get_weights()
 
+    # Overwrite the saved model if the transfer one is better
+    if best["original average f1"] < best["transfer average f1"]:
+        Models.save(dirPath, transfer=True)
+
+    # Otherwise go back to the original model
+    else:
+        model.set_weights(best["original weight"])
+
     print("TRANSFER LEARNING FINISH !!!!!!")
     print("F1 score")
     print("original: ", best["original average f1"])
