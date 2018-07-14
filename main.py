@@ -104,11 +104,12 @@ if __name__ == '__main__':
     loss = "binary_crossentropy"
     optimizer = Adam()
     print("default lr: ", optimizer.lr)
-    callbacks = [
-        CallBacks.CompleteLogger(logPath=dirPath, validation_data=(dataset.validationDataset["mel"]["input"],
-                                                                   dataset.validationDataset["mel"]["output"])
-                                 ),
-    ]
+    completeLogger = CallBacks.CompleteLogger(
+        logPath=dirPath,
+        validation_data=(dataset.validationDataset["mel"]["input"], dataset.validationDataset["mel"]["output"])
+    )
+
+    callbacks = [completeLogger]
 
     model = Models.crnn_mel64_tr2(dataset)
 
@@ -128,6 +129,8 @@ if __name__ == '__main__':
             verbose=0
         )
 
+        # save best model (callback history)
+        model.set_weights(completeLogger.history[0])
         Models.save(dirPath, model)
 
     else:
