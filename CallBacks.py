@@ -96,7 +96,7 @@ class CompleteLogger(Callback):
         average_f1 = self.f1.mean()
 
         # add the current model to the list of history
-        self.history.append( {"weights": self.model.get_weights(), "average f1": average_f1} )
+        self.history.append( {"weights": self.model.get_weights(), "average f1": average_f1, "epoch": self.currentEpoch} )
 
         # sort the list using the average f1 key
         self.history = sorted(self.history_size, key=lambda k: k['average f1'])
