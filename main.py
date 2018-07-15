@@ -143,6 +143,8 @@ if __name__ == '__main__':
     # ==================================================================================================================
     #   Extend original weak dataset by predicting unlabel_in_domain
     # ==================================================================================================================
+    completeLogger.toggleTransfer()
+
     print("==== PREDICT UNLABEL_IN_DOMAIN ====")
     featurePath = dict()
     featureFiles = dict()
