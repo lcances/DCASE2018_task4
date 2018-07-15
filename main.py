@@ -168,11 +168,11 @@ if __name__ == '__main__':
     binPrediction = binarizer.binarize(prediction)
     # prediction[prediction > 0.5] = 1        # TODO Change by binarizer
     # prediction[prediction < 0.5] = 0        # TODO change by binarizer
-    precision = f1_score(dataset.validationDataset[feat[0]]["output"], prediction, average=None)
+    f1 = Metrics.f1(dataset.validationDataset[feat[0]]["output"], prediction)
 
     best = {
-        "original weight": model.get_weights(), "original average f1": precision.mean(),
-        "transfer weight": model.get_weights(), "transfer average f1": precision.mean()
+        "original weight": model.get_weights(), "original average f1": f1,
+        "transfer weight": model.get_weights(), "transfer average f1": f1,
     }
 
     with open(os.path.join(metaRoot, "unlabel_in_domain_semi.csv"), "w") as metaFile:
@@ -225,7 +225,7 @@ if __name__ == '__main__':
                 newOutput.append(output)
             newOutput = np.array(newOutput)
 
-            optimizer.lr = 0.00001  # 100 times smaller
+            #optimizer.lr = 0.00001  # 100 times smaller
             model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
             model.fit(
                 x=[np.array(featureLoaded[feat[0]])],
@@ -245,12 +245,12 @@ if __name__ == '__main__':
             prediction[prediction > 0.5] = 1        # TODO use binarizer
             prediction[prediction < 0.5] = 0        # TODO use binarizer
             print("\n\n\nSCORE\n\n\n")
-            precision = f1_score(dataset.validationDataset[feat[0]]["output"], prediction, average=None)
-            print("original: %.5f <--> %.5f transfer" % (best["original average f1"], precision.mean()) )
+            f1 = Metrics.f1(dataset.validationDataset[feat[0]]["output"], prediction)
+            print("original: %.5f <--> %.5f transfer" % (best["original average f1"], f1) )
 
             # save model if better
-            if precision.mean() > best["transfer average f1"]:
-                best["transfer average f1"] = precision.mean()
+            if f1 > best["transfer average f1"]:
+                best["transfer average f1"] = f1
                 best["transfer weight"] = model.get_weights()
 
     # Overwrite the saved model if the transfer one is better
