@@ -174,18 +174,20 @@ if __name__ == '__main__':
         "original weight": model.get_weights(), "original average f1": f1,
         "transfer weight": model.get_weights(), "transfer average f1": f1,
     }
+    # iniaitlaization of the variables
+    toLoad = dict()
+
+    for f in feat:
+        toLoad[f] = featureFiles[f][i:i+nbFileToPredict]
+
+    # retrieve the features (already extracted)
+    featureLoaded = dict()
+    for f in feat:
+        featureLoaded[f] = []
+    labels = []
 
     with open(os.path.join(metaRoot, "unlabel_in_domain_semi.csv"), "w") as metaFile:
         for i in range(0, len(featureFiles[feat[0]]) - nbFileToPredict, nbFileToPredict):
-            toLoad = dict()
-
-            for f in feat:
-                toLoad[f] = featureFiles[f][i:i+nbFileToPredict]
-
-            # retrieve the features (already extracted)
-            featureLoaded = dict()
-            for f in feat:
-                featureLoaded[f] = []
 
             for j in range(nbFileToPredict):
                 for f in feat:
@@ -204,7 +206,6 @@ if __name__ == '__main__':
 
             # write the new metadata for unlabel_in_domain newly annotated
             unlabelInDomainWeakMeta = ""
-            labels = []
             for k in range(nbFileToPredict):
                 fileName = toLoad[feat[0]][k]
                 unlabelInDomainWeakMeta += "%s %s\n" % (fileName, binPredictionCls[k])
@@ -214,55 +215,35 @@ if __name__ == '__main__':
             print("Saving results %s to %s" % (i, i+nbFileToPredict))
             metaFile.write(unlabelInDomainWeakMeta)
 
-            # Retrain the model and check if better than previous one
-            newOutput = []
-            for label in labels:
+    # Retrain the model and check if better than previous one
+    # format the output
+    newOutput = []
+    for label in labels:
 
-                output = [0] * 10
-                for l in label:
-                    if l != "":
-                        output[DCASE2018.class_correspondance[l]] = 1
-                newOutput.append(output)
-            newOutput = np.array(newOutput)
+        output = [0] * 10
+        for l in label:
+            if l != "":
+                output[DCASE2018.class_correspondance[l]] = 1
+        newOutput.append(output)
+    newOutput = np.array(newOutput)
 
-            #optimizer.lr = 0.00001  # 100 times smaller
-            model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
-            model.fit(
-                x=[np.array(featureLoaded[feat[0]])],
-                y=newOutput,
-                epochs=80,
-                validation_data=(
-                    dataset.validationDataset["mel"]["input"],
-                    dataset.validationDataset["mel"]["output"]
-                ),
-                batch_size=batch_size,
-                callbacks=callbacks,
-                verbose=0
-            )
+    #optimizer.lr = 0.00001  # 100 times smaller
+    model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
+    model.fit(
+        x=[np.array(featureLoaded[feat[0]])],
+        y=newOutput,
+        epochs=80,
+        validation_data=(
+            dataset.validationDataset["mel"]["input"],
+            dataset.validationDataset["mel"]["output"]
+        ),
+        batch_size=batch_size,
+        callbacks=callbacks,
+        verbose=0
+    )
 
-            print("PREDICTION\n\n\n")
-            prediction = model.predict(dataset.validationDataset[feat[0]]["input"])
-            prediction[prediction > 0.5] = 1        # TODO use binarizer
-            prediction[prediction < 0.5] = 0        # TODO use binarizer
-            print("\n\n\nSCORE\n\n\n")
-            f1 = Metrics.f1(dataset.validationDataset[feat[0]]["output"], prediction)
-            print("original: %.5f <--> %.5f transfer" % (best["original average f1"], f1) )
-
-            # save model if better
-            if f1 > best["transfer average f1"]:
-                best["transfer average f1"] = f1
-                best["transfer weight"] = model.get_weights()
-
-    # Overwrite the saved model if the transfer one is better
-    if best["original average f1"] < best["transfer average f1"]:
-        Models.save(dirPath, transfer=True)
-
-    # Otherwise go back to the original model
-    else:
-        model.set_weights(best["original weight"])
-
-    print("TRANSFER LEARNING FINISH !!!!!!")
-    print("F1 score")
-    print("original: ", best["original average f1"])
-    print("tranfer: ", best["transfer average f1"])
+    print("PREDICTION\n\n\n")
+    prediction = model.predict(dataset.validationDataset[feat[0]]["input"])
+    prediction[prediction > 0.5] = 1        # TODO use binarizer
+    prediction[prediction < 0.5] = 0        # TODO use binarizer
 
