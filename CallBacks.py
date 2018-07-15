@@ -29,7 +29,11 @@ class CompleteLogger(Callback):
         self.history_size = history_size
         self.history = []       # a history of the best models
 
+        self.transferMode = False
         self.binarizer = Binarizer()
+
+    def toggleTransfer(self):
+        self.transferMode != self.transferMode
 
     def on_train_begin(self, logs=None):
         super().on_train_begin(logs)
@@ -130,13 +134,17 @@ class CompleteLogger(Callback):
 
         # open the files
         for key in self.logPath.keys():
-            self.logFile[key] = open(self.logPath[key], "w")
+            if not self.transferMode:
+                self.logFile[key] = open(self.logPath[key], "w")
+            else:
+                self.logFile[key] = open(self.logPath[key], "a")
 
         # write headers
-        for key in self.logFile:
-            if key != "general":
-                self.__logClassesheader(self.logFile[key])
-        self.__logGeneralHeader()
+        if not self.transferMode:
+            for key in self.logFile:
+                if key != "general":
+                    self.__logClassesheader(self.logFile[key])
+            self.__logGeneralHeader()
 
     def __finishLogFiles(self):
         if not self.logging:
