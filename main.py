@@ -39,6 +39,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--normalizer", help="normalizer [file_MinMax | global_MinMax | file_Mean | global_Mean | file_standard | global_standard | unit")
     parser.add_argument("--output_model", help="basename for save file of the model")
+    parser.add_argument("--meta_root", help="Path to the meta directory")
+    parser.add_argument("--features_root", help="Path to the features directory")
     parser.add_argument("-w", help="If set, display the warnigs", action="store_true")
     args = parser.parse_args()
 
@@ -80,8 +82,8 @@ if __name__ == '__main__':
     # ==================================================================================================================
     #       PREPARE DATASET
     # ==================================================================================================================
-    metaRoot = "../Corpus/DCASE2018/meta"
-    featRoot = "../Corpus/DCASE2018/features_2"
+    metaRoot = args.meta_root
+    featRoot = args.features_root
     feat = ["mel"]
     dataset = DCASE2018(
         featureRoot=featRoot,
@@ -159,7 +161,6 @@ if __name__ == '__main__':
     # Each time, retrain model (transfer learning) and save model. Keep only the best model
     # Model are evaluate on their classification score (F1)
     # TODO evaluate also on the localization score
-    nbFileToPredict = 1000
     binarizer = Binarizer()
     encoder = Encoder()
 
@@ -177,43 +178,38 @@ if __name__ == '__main__':
     # iniaitlaization of the variables
     toLoad = dict()
 
-    for f in feat:
-        toLoad[f] = featureFiles[f][i:i+nbFileToPredict]
-
     # retrieve the features (already extracted)
     featureLoaded = dict()
     for f in feat:
         featureLoaded[f] = []
     labels = []
 
+    unlabelInDomainWeakMeta = ""
+
     with open(os.path.join(metaRoot, "unlabel_in_domain_semi.csv"), "w") as metaFile:
-        for i in range(0, len(featureFiles[feat[0]]) - nbFileToPredict, nbFileToPredict):
+        for i in range(len(featureFiles[feat[0]])):
+            for f in feat:
+                feature = np.load(os.path.join(featurePath[f], featureFiles[f][i]))
 
-            for j in range(nbFileToPredict):
-                for f in feat:
-                    feature = np.load(os.path.join(featurePath[f], toLoad[f][j]))
+                # pre processing
+                feature = np.expand_dims(feature, axis=-1)
 
-                    # pre processing
-                    feature = np.expand_dims(feature, axis=-1)
+                featureLoaded[f].append(feature)
 
-                    featureLoaded[f].append(feature)
+        # predict the <nbFileToPredict> files loaded in memory
+        toPredictList = [featureLoaded[f] for f in feat]
+        prediction = model.predict(toPredictList)
+        binPrediction = binarizer.binarize(prediction)
+        binPredictionCls = encoder.binToClass(binPrediction)
 
-            # predict the <nbFileToPredict> files loaded in memory
-            toPredictList = [featureLoaded[f] for f in feat]
-            prediction = model.predict(toPredictList)
-            binPrediction = binarizer.binarize(prediction)
-            binPredictionCls = encoder.binToClass(binPrediction)
+        # write the new metadata for unlabel_in_domain newly annotated
+        fileName = featureFiles[feat[0]][i]
+        unlabelInDomainWeakMeta += "%s %s\n" % (fileName, binPredictionCls[k])
+        labels.append(binPredictionCls[i].split(","))
 
-            # write the new metadata for unlabel_in_domain newly annotated
-            unlabelInDomainWeakMeta = ""
-            for k in range(nbFileToPredict):
-                fileName = toLoad[feat[0]][k]
-                unlabelInDomainWeakMeta += "%s %s\n" % (fileName, binPredictionCls[k])
-                labels.append(binPredictionCls[k].split(","))
-
-            # save the new metadata file
-            print("Saving results %s to %s" % (i, i+nbFileToPredict))
-            metaFile.write(unlabelInDomainWeakMeta)
+        # save the new metadata file
+        print("Saving results")
+        metaFile.write(unlabelInDomainWeakMeta)
 
     # Retrain the model and check if better than previous one
     # format the output
