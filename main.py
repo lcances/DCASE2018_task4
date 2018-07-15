@@ -101,7 +101,7 @@ if __name__ == '__main__':
     # ==================================================================================================================
     # hyperparameters
     epochs = 100
-    batch_size = 12
+    batch_size = 32
     metrics = ["binary_accuracy", Metrics.precision, Metrics.recall, Metrics.f1]
     loss = "binary_crossentropy"
     optimizer = Adam()
@@ -169,7 +169,7 @@ if __name__ == '__main__':
     binPrediction = binarizer.binarize(prediction)
     # prediction[prediction > 0.5] = 1        # TODO Change by binarizer
     # prediction[prediction < 0.5] = 0        # TODO change by binarizer
-    f1 = Metrics.f1(dataset.validationDataset[feat[0]]["output"], prediction)
+    f1 = f1_score(dataset.validationDataset[feat[0]]["output"], binPrediction, average=None)
 
     best = {
         "original weight": model.get_weights(), "original average f1": f1,
@@ -197,15 +197,16 @@ if __name__ == '__main__':
                 featureLoaded[f].append(feature)
 
         # predict the <nbFileToPredict> files loaded in memory
-        toPredictList = [featureLoaded[f] for f in feat]
+        toPredictList = [np.array(featureLoaded[f]) for f in feat]
         prediction = model.predict(toPredictList)
         binPrediction = binarizer.binarize(prediction)
         binPredictionCls = encoder.binToClass(binPrediction)
 
         # write the new metadata for unlabel_in_domain newly annotated
-        fileName = featureFiles[feat[0]][i]
-        unlabelInDomainWeakMeta += "%s %s\n" % (fileName, binPredictionCls[k])
-        labels.append(binPredictionCls[i].split(","))
+        for i in range(len(featureFiles[feat[0]])):
+            fileName = featureFiles[feat[0]][i]
+            unlabelInDomainWeakMeta += "%s %s\n" % (fileName, binPredictionCls[i])
+            labels.append(binPredictionCls[i].split(","))
 
         # save the new metadata file
         print("Saving results")
