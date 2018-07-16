@@ -2,6 +2,9 @@ import os
 from random import shuffle
 
 import numpy as np
+import tqdm
+import copy
+from keras.models import Model
 from keras.utils import Sequence
 
 class DCASE2018:
@@ -16,7 +19,7 @@ class DCASE2018:
 
     def __init__(self,
                  featureRoot: str, metaRoot: str, features: list,
-                 expandWithUod: bool = False,
+                 expandWithUod: bool = False, expandPercent: float = 0.20,
                  validationPercent: float = 0.2,
                  normalizer = None):
 
@@ -39,6 +42,7 @@ class DCASE2018:
         self.metadata = {}
 
         self.expandWithUod = expandWithUod
+        self.expandPercent = expandPercent
         self.validationPercent = validationPercent
         self.originalShape = {}
         self.normalizer = normalizer
@@ -70,8 +74,6 @@ class DCASE2018:
         for f in self.features:
             self.__createDataset(f, training_data, validation_data)
             self.__preProcessing(f)
-
-        self._built = True
 
     def __init(self):
         # init dict
@@ -121,11 +123,10 @@ class DCASE2018:
         self.metadata["test"] = load(self.meta_test)
 
         # Use to extend training dataset, gather only 0.2 * len(training_dataset) of the uod
-        nbFileForUod = len(self.metadata["weak"]) * 0.2
-        self.metadata["uod"] = load(self.meta_train_uod, int(nbFileForUod))
+        if self.expandWithUod:
+            nbFileForUod = len(self.metadata["weak"]) * self.expandPercent
+            self.metadata["uod"] = load(self.meta_train_uod, int(nbFileForUod))
 
-        
-        
     def __expand(self):
         for f in self.metadata["weak"]:
             f[0] = [self.featureRoot, "train", "weak", "feature", f[0]]
@@ -135,8 +136,54 @@ class DCASE2018:
                 f[0] = [self.featureRoot, "train", "unlabel_out_of_domain", "feature", f[0]]
             self.metadata["weak"].extend(self.metadata["uod"])
 
-            
-            
+    def loadUID(self) -> dict:
+        """ Load the features for the "unlabel_in_domain" dataset.
+
+        It is not done when building the dataset since this part is not always necessarily.
+
+        :return: dict containing the data of the features (the key is the name of the feature)
+        """
+        # prepare path
+        print("meta UID: ", len(self.metadata["uid"]))
+        for f in self.metadata["uid"]:
+            f[0] = [self.featureRoot, "train", "unlabel_in_domain", "feature", f[0][:-1]]
+
+        # ---- load the features ----
+        inputs = {}
+        with tqdm.tqdm(total=len(self.metadata["uid"]) * len(self.features), unit="Files") as progress:
+            for feature in self.features:
+                inputs[feature] = []
+
+                for i in range(len(self.metadata["uid"])):
+                    info = self.metadata["uid"][i]
+                    pathList = info[0]
+                    pathList[3] = feature
+                    path = os.path.join(*pathList) + ".npy"
+
+                    if os.path.isfile(path):
+                        feat = np.load(path)
+
+                        # preprocessing and add
+                        feat = np.expand_dims(feat, axis=-1)
+                        inputs[feature].append(feat)
+
+                    progress.update()
+
+                inputs[feature] = np.array(inputs[feature])
+
+        return inputs
+
+    def expandWithUID(self, features: np.array, prediction: list):
+        for feature in features:
+            self.trainingDataset[feature]["input"] = np.concatenate(
+                (self.trainingDataset[feature]["input"], features[feature])
+            )
+            self.trainingDataset[feature]["output"] = np.concatenate(
+                (self.trainingDataset[feature]["output"], np.array(prediction))
+             )
+
+
+
     def __balancedSplit(self):
         """ Split the weak subset into a balanced weak training and weak validation subsets"""
         splited = [[] for i in range(self.nbClass)]
@@ -171,7 +218,7 @@ class DCASE2018:
             for info in toLoad:
                 pathList = info[0]
                 pathList[3] = feature
-                path = os.path.join(*info[0]) + ".npy"
+                path = os.path.join(*pathList) + ".npy"
 
                 if os.path.isfile(path):
                     output = [0] * self.nbClass
