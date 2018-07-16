@@ -139,96 +139,44 @@ if __name__ == '__main__':
         print("Model already build and train, loading ...")
         model = Models.load(dirPath)
 
-
-
-
     # ==================================================================================================================
     #   Extend original weak dataset by predicting unlabel_in_domain
     # ==================================================================================================================
+    print("Compute f1 score ...")
     completeLogger.toggleTransfer()
-
-    print("==== PREDICT UNLABEL_IN_DOMAIN ====")
-    featurePath = dict()
-    featureFiles = dict()
-    features = dict()
-
-    for f in feat:
-        featurePath[f] = os.path.join(featRoot, "train", "unlabel_in_domain", f)
-        featureFiles[f] = os.listdir(featurePath[f])
-        features[f] = []
-
-    # predict the unlabel_in_domain 1000 by 1000 (memory usage limitation 1000 ~= 230 Mo)
-    # Each time, retrain model (transfer learning) and save model. Keep only the best model
-    # Model are evaluate on their classification score (F1)
-    # TODO evaluate also on the localization score
     binarizer = Binarizer()
     encoder = Encoder()
 
     # save original model and keep track of the best one.
     prediction = model.predict(dataset.validationDataset[feat[0]]["input"])
     binPrediction = binarizer.binarize(prediction)
-    # prediction[prediction > 0.5] = 1        # TODO Change by binarizer
-    # prediction[prediction < 0.5] = 0        # TODO change by binarizer
     f1 = f1_score(dataset.validationDataset[feat[0]]["output"], binPrediction, average=None)
+    print(f1)
 
     best = {
-        "original weight": model.get_weights(), "original average f1": f1,
-        "transfer weight": model.get_weights(), "transfer average f1": f1,
+        "original weight": model.get_weights(), "original f1": f1,
+        "transfer weight": model.get_weights(), "transfer f1": f1,
     }
-    # iniaitlaization of the variables
-    toLoad = dict()
 
-    # retrieve the features (already extracted)
-    featureLoaded = dict()
-    for f in feat:
-        featureLoaded[f] = []
-    labels = []
+    # load the unlabel_in_domain features
+    print("Loading the unlabel in domain dataset ...")
+    uid_features = dataset.loadUID()
 
-    unlabelInDomainWeakMeta = ""
 
-    with open(os.path.join(metaRoot, "unlabel_in_domain_semi.csv"), "w") as metaFile:
-        for i in range(len(featureFiles[feat[0]])):
-            for f in feat:
-                feature = np.load(os.path.join(featurePath[f], featureFiles[f][i]))
+    # Predict the complete unlabel_in_domain dataset and use it to expand the training dataset
+    print("Predicting the unlabel in domain dataset ...")
+    toPredict = [uid_features[f] for f in feat]
+    prediction = model.predict(toPredict)
+    binPrediction = binarizer.binarize(prediction)
 
-                # pre processing
-                feature = np.expand_dims(feature, axis=-1)
+    print("Expand training dataset and re-training ...")
+    dataset.expandWithUID(uid_features, binPrediction)
 
-                featureLoaded[f].append(feature)
-
-        # predict the <nbFileToPredict> files loaded in memory
-        toPredictList = [np.array(featureLoaded[f]) for f in feat]
-        prediction = model.predict(toPredictList)
-        binPrediction = binarizer.binarize(prediction)
-        binPredictionCls = encoder.binToClass(binPrediction)
-
-        # write the new metadata for unlabel_in_domain newly annotated
-        for i in range(len(featureFiles[feat[0]])):
-            fileName = featureFiles[feat[0]][i]
-            unlabelInDomainWeakMeta += "%s %s\n" % (fileName, binPredictionCls[i])
-            labels.append(binPredictionCls[i].split(","))
-
-        # save the new metadata file
-        print("Saving results")
-        metaFile.write(unlabelInDomainWeakMeta)
-
-    # Retrain the model and check if better than previous one
-    # format the output
-    newOutput = []
-    for label in labels:
-
-        output = [0] * 10
-        for l in label:
-            if l != "":
-                output[DCASE2018.class_correspondance[l]] = 1
-        newOutput.append(output)
-    newOutput = np.array(newOutput)
-
-    #optimizer.lr = 0.00001  # 100 times smaller
+    optimizer.lr = 0.00001  # 100 times smaller than the Adam default (0.001)
     model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
     model.fit(
-        x=[np.array(featureLoaded[feat[0]])],
-        y=newOutput,
+        x=dataset.trainingDataset["mel"]["input"],
+        y=dataset.trainingDataset["mel"]["output"],
         epochs=80,
         validation_data=(
             dataset.validationDataset["mel"]["input"],
@@ -239,8 +187,31 @@ if __name__ == '__main__':
         verbose=0
     )
 
-    print("PREDICTION\n\n\n")
+    # compute f1 score and same (for later comparison)
+    print("Compute the final f1 score ...")
     prediction = model.predict(dataset.validationDataset[feat[0]]["input"])
-    prediction[prediction > 0.5] = 1        # TODO use binarizer
-    prediction[prediction < 0.5] = 0        # TODO use binarizer
+    binPrediction = binarizer.binarize(prediction)
+    f1 = f1_score(dataset.validationDataset[feat[0]]["output"], binPrediction, average=None)
+    best["transfer weight"] = model.get_weights()
+    best["transfer f1"] = f1
+
+    # save the new model with the _tranfer extension
+    Models.save(dirPath + "_transfer", model)
+
+    print("======== COMPARISON BEFORE AND AFTER TRANSFER ========")
+    print("%-*s" % (10, "MODEL") )
+    for i in range(len(best["original f1"])):
+        if i == 0:
+            print("%-*s" % (10, "ORIG"), end="")
+            print("%-*.4f" % (10, f1[i]), end="")
+        print("%-*.4f" % (10, f1[i]), end="")
+    print("")
+    for i in range(len(best["transfer f1"])):
+        if i == 0:
+            print("%-*s" % (10, "TRANS"), end="")
+            print("%-*.4f" % (10, f1[i]), end="")
+        print("%-*.4f" % (10, f1[i]), end="")
+    print("")
+
+
 
