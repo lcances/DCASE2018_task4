@@ -132,7 +132,7 @@ if __name__ == '__main__':
         )
 
         # save best model (callback history)
-        model.set_weights(completeLogger.history[0])
+        model.set_weights(completeLogger.history[0]["weights"])
         Models.save(dirPath, model)
 
     else:
