@@ -26,6 +26,41 @@ class Encoder:
 
         return output
 
+    def __smooth(self, temporalPrediction: np.array, method: str = "smoothMovingAvg", **kwargs) -> np.array:
+        _methods = ["smoothMovingAvg"]
+        if method not in _methods:
+            print("method %s doesn't exist. Only ", _methods, " available")
+            sys.exit(1)
+
+        if method == _methods[0]: smoother = self.__smoothMeanAvg
+        else:
+            return
+
+        return smoother(temporalPrediction, **kwargs)
+
+    def __smoothMeanAvg(self, temporalPrediction: np.array, **kwargs):
+        print("Smooting using the smooth moving average algorithm")
+        def smooth(data, window_len = 11):
+            # retreiving extract arguments
+            keys = kwargs.keys()
+            window_len = kwargs["window_len"] if "window_len" in keys else 11
+
+            window_len = int(window_len)
+
+            if window_len < 3:
+                return data
+
+            s = np.r_[2 * data[0] - data[window_len - 1::-1], data, 2 * data[-1] - data[-1:-window_len:-1]]
+            w = np.ones(window_len, 'd')
+            y = np.convolve(w / w.sum(), s, mode='same')
+            return y[window_len:-window_len + 1]
+
+        for clipInd in range(len(temporalPrediction)):
+            clip = temporalPrediction[clipInd]
+
+            for clsInd in range(len(clip.T)):
+                clip.T[clsInd] = smooth(clip.T[clsInd])
+
     def binToClass(self, prediction: np.array, binarize: bool = False) -> np.array:
         """ Given the prediction output of the network, match the results to the class name.
 
@@ -58,7 +93,7 @@ class Encoder:
 
         return np.array(output)
 
-    def encode(self, temporalPrediction: np.array, method: str = "threshold", **kwargs) -> str:
+    def encode(self, temporalPrediction: np.array, method: str = "threshold", smooth: str = None, **kwargs) -> str:
         """
         Perform the localization of the sound event present in the file.
 
@@ -82,6 +117,9 @@ class Encoder:
         elif method == _methods[3]: encoder = self.__encodeUsingPrimitive
         else:
             sys.exit(1)
+        
+        if smooth is not None:
+            self.__smooth(temporalPrediction, method=smooth, **kwargs)
 
         self.nbFrame = temporalPrediction.shape[1]
         self.frameLength = 10 / self.nbFrame
@@ -156,7 +194,7 @@ class Encoder:
         binarizer = Binarizer()
         binPrediction = binarizer.binarize(temporalPrediction)
 
-        # Merging "hole" that are smeller than 200 ms
+        # Merging "hole" that are smaller than 200 ms
         stepLength = DCASE2018.CLIP_LENGTH / temporalPrediction.shape[1] * 1000     # in ms
         maxHoleSize = int(temporalPrecision / stepLength)
 
