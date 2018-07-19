@@ -148,10 +148,11 @@ if __name__ == '__main__':
     encoder = Encoder()
 
     # save original model and keep track of the best one.
+    # Optimize thresholds
     prediction = model.predict(dataset.validationDataset[feat[0]]["input"])
+    binarizer.optimize(dataset.validationDataset["mel"]["output"], prediction)
     binPrediction = binarizer.binarize(prediction)
     f1 = f1_score(dataset.validationDataset[feat[0]]["output"], binPrediction, average=None)
-    print(f1)
 
     best = {
         "original weight": model.get_weights(), "original f1": f1,
@@ -172,17 +173,33 @@ if __name__ == '__main__':
     print("Expand training dataset and re-training ...")
     dataset.expandWithUID(uid_features, binPrediction)
 
-    optimizer.lr = 0.00001  # 100 times smaller than the Adam default (0.001)
+    # use both weak dataset and unlabel in domain dataset as training dataset
+    forTraining = {
+        "input": np.concatenate(
+            (dataset.trainingDataset["mel"]["input"], dataset.trainingUidDataset["mel"]["input"])),
+        "output": np.concatenate(
+            (dataset.trainingDataset["mel"]["output"], dataset.trainingUidDataset["mel"]["output"]))
+    }
+
+    # use the whole weak dataset as validation dataset
+    forValidation = {
+        "input": np.concatenate(
+            (dataset.trainingDataset["mel"]["input"], dataset.validationDataset["mel"]["input"])),
+        "output": np.concatenate(
+            (dataset.trainingDataset["mel"]["output"], dataset.validationDataset["mel"]["output"])),
+    }
+
+    #optimizer.lr = 0.00001  # 100 times smaller than the Adam default (0.001)
     model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
     model.fit(
-        x=dataset.trainingDataset["mel"]["input"],
-        y=dataset.trainingDataset["mel"]["output"],
-        epochs=80,
+        x=forTraining["input"],
+        y=forTraining["output"],
+        epochs=100,
         validation_data=(
-            dataset.validationDataset["mel"]["input"],
-            dataset.validationDataset["mel"]["output"]
+            forValidation["input"],
+            forValidation["output"]
         ),
-        batch_size=batch_size,
+        batch_size=128,
         callbacks=callbacks,
         verbose=0
     )
