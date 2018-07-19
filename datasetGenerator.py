@@ -74,6 +74,7 @@ class DCASE2018:
 
         for f in self.features:
             self.__createDataset(f, training_data, validation_data)
+            self.__createTestDataset(f)
             self.__preProcessing(f)
 
     def __init(self):
@@ -176,15 +177,6 @@ class DCASE2018:
         return inputs
 
     def expandWithUID(self, features: np.array, prediction: list):
-        """
-        for feature in features:
-            self.trainingDataset[feature]["input"] = np.concatenate(
-                (self.trainingDataset[feature]["input"], features[feature])
-            )
-            self.trainingDataset[feature]["output"] = np.concatenate(
-                (self.trainingDataset[feature]["output"], np.array(prediction))
-             )
-        """
         for feature in features:
             self.trainingUidDataset[feature]["input"] = features[feature]
             self.trainingUidDataset[feature]["output"] = np.array(prediction)
@@ -241,6 +233,22 @@ class DCASE2018:
 
         loadFeatures(self.trainingDataset, training_data)
         loadFeatures(self.validationDataset, validation_data)
+
+    def __createTestDataset(self, feature):
+        self.testingDataset[feature]["input"] = []
+
+        for f in self.metadata["test"]:
+            f[0] = [self.featureRoot, "test", "feature", f[0]]
+
+        # load the features
+        for info in self.metadata["test"]:
+            pathList = info[0]
+            pathList[3] = feature
+            path = os.path.join(*pathList) + ".npy"
+
+            if os.path.isfile(path):
+                feat = np.load(path)
+                self.testingDataset[feature]["input"].append(feat)
 
     def getInputShape(self, feature):
         shape = self.trainingDataset[feature]["input"][0].shape
