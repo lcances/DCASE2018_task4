@@ -55,6 +55,7 @@ class DCASE2018:
 
         # dataset that will be used
         self.trainingDataset = {}
+        self.trainingUidDataset = {}
         self.validationDataset = {}
         self.testingDataset = {}
 
@@ -81,6 +82,7 @@ class DCASE2018:
             self.trainingDataset[f] = {"input": [], "output": []}
             self.validationDataset[f] = {"input": [], "output": []}
             self.testingDataset[f] = {"input": [], "output": []}
+            self.trainingUidDataset[f] = {"input": [], "output": []}
             self.originalShape[f] = None
 
     def __preProcessing(self, feature: str):
@@ -174,6 +176,7 @@ class DCASE2018:
         return inputs
 
     def expandWithUID(self, features: np.array, prediction: list):
+        """
         for feature in features:
             self.trainingDataset[feature]["input"] = np.concatenate(
                 (self.trainingDataset[feature]["input"], features[feature])
@@ -181,8 +184,10 @@ class DCASE2018:
             self.trainingDataset[feature]["output"] = np.concatenate(
                 (self.trainingDataset[feature]["output"], np.array(prediction))
              )
-
-
+        """
+        for feature in features:
+            self.trainingUidDataset[feature]["input"] = features[feature]
+            self.trainingUidDataset[feature]["output"] = np.array(prediction)
 
     def __balancedSplit(self):
         """ Split the weak subset into a balanced weak training and weak validation subsets"""
