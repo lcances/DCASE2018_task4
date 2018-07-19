@@ -58,6 +58,7 @@ class DCASE2018:
         self.trainingUidDataset = {}
         self.validationDataset = {}
         self.testingDataset = {}
+        self.testFileList = []
 
         # interior variables
         self.build()
@@ -245,6 +246,7 @@ class DCASE2018:
             pathList = info[0]
             pathList[3] = feature
             path = os.path.join(*pathList) + ".npy"
+            self.testFileList.append(path)
 
             if os.path.isfile(path):
                 feat = np.load(path)
