@@ -10,22 +10,25 @@ from datasetGenerator import DCASE2018
 import numpy as np
 import copy
 import sys
-from sklearn.metrics import recall_score, precision_score, f1_score
+import random
+from sklearn.metrics import recall_score, precision_score, f1_score, roc_curve
 
 
 class Binarizer(object):
     _instance = None
+    _exist = False
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
             cls._instance = super(Binarizer, cls).__new__(cls, *args, **kwargs)
         return cls._instance
 
     def __init__(self):
-        self.thresholds = dict()
-        self.optimized = False
+        if not Binarizer._exist:
+            self.thresholds = dict()
+            self.optimized = False
 
-        self.__initThresholds()
-
+            self.__initThresholds()
+            Binarizer._exist = True
 
     def __initThresholds(self):
         """
@@ -35,7 +38,7 @@ class Binarizer(object):
             self.thresholds[key] = 0.5
 
 
-    def optimize(self, y_true: np.array, predictionResult: np.array, method: str = "metrics"):
+    def optimize(self, y_true: np.array, predictionResult: np.array, method: str = "simulated_annealing"):
         """ Find the best thresholds for each classes with different methods available.
 
         methods available are
@@ -46,8 +49,10 @@ class Binarizer(object):
         :param predictionResult: 2-dimension numpy array not binarized
         :param method: methods to use for the threshold optimization: "metrics" | "auc"
         """
-        if method == "metrics": optimizer = self.__metricsOptimization
-        elif method == "auc": optimizer = self.__aucOptimization
+        _method = ["metrics", "auc", "simulated_annealing"]
+        if method == _method[0]: optimizer = self.__metricsOptimization
+        elif method == _method[1]: optimizer = self.__aucOptimization
+        elif method == _method[2]: optimizer = self.__simulatedAnnealingOptimization
         else:
             # TODO change sys.exit by raise
             print("Can't binarize on a array of dimension different that 2 or 3")
@@ -59,6 +64,62 @@ class Binarizer(object):
 
         optimizer(y_true, predictionResult)
         self.optimized = True
+
+    def __simulatedAnnealingOptimization(self, y_true, predictionResult: np.array):
+        def applyThreshold(thresh: list, prediction: np.array) -> list:
+            pred = copy.copy(prediction)
+
+            for clsInd in range(len(pred.T)):
+                pred.T[clsInd][pred.T[clsInd] > thresh[clsInd]] = 1
+                pred.T[clsInd][pred.T[clsInd] <= thresh[clsInd]] = 0
+
+            return pred
+
+        def initThresholds():
+            return np.array([random.randint(40, 60) / 100 for _ in range(10)])
+
+        def gaussian(x, mu, sig):
+            return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
+
+        def calcDelta(thresholds, weight):
+            output = []
+            for th in thresholds:
+                g = gaussian(th, 0.5, 0.08)
+                output.append((random.random() * 2 * g - g) * weight)
+            return np.array(output)
+
+        # initialization
+        thresholds = [0.5 for _ in range(10)]
+        pred0 = applyThreshold(thresholds, predictionResult)
+        f10 = f1_score(pred0, y_true, average=None)
+
+        best = {"thresholds": thresholds, "mean f1": f10.mean(), "f1": f10}
+
+        metaIter = 100
+        nbIter = 30
+
+        for j in range(metaIter):
+            thresholds = initThresholds()
+            weight = 0.07
+            decay = weight / (nbIter * 1.9)
+
+            for i in range(nbIter):
+                delta = calcDelta(thresholds, weight)
+                thresholds += delta
+                weight -= decay
+
+                nPred = applyThreshold(thresholds, predictionResult)
+                f1 = f1_score(nPred, y_true, average=None)
+
+                if f1.mean() > best["mean f1"]:
+                    best["thresholds"] = thresholds
+                    best["mean f1"] = f1.mean()
+                    best["f1"] = f1
+
+        cpt = 0
+        for key in self.thresholds:
+            self.thresholds[key] = best["thresholds"][cpt]
+            cpt += 1
 
     def __metricsOptimization(self, y_true: np.array , predictionResult: np.array):
         binPrediction = self.binarize(predictionResult)
@@ -73,7 +134,18 @@ class Binarizer(object):
             self.thresholds[cls] = (f1[index] + recall[index] + precision[index]) / 3
 
     def __aucOptimization(self, y_true: np.array, predictionResult: np.array):
-        pass
+        fpr = dict()
+        tpr = dict()
+
+        bestThresholds = [0] * DCASE2018.NB_CLASS
+        for cls in DCASE2018.class_correspondance:
+            y_true = np.array(y_true[:, cls])
+            y_pred = np.array(predictionResult[:, cls])
+
+            fpr[cls], tpr[cls], thresholds = roc_curve(y_true, y_pred, pos_label=1, drop_intermediate=False)
+
+            bestThInd = np.argmax(tpr[cls] - fpr[cls])
+            self.thresholds[cls] = thresholds[bestThInd]
 
     def resetOptimization(self):
         """
