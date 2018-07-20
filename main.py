@@ -1,7 +1,7 @@
 import os
 import argparse
 
-from sklearn.metrics import precision_score, recall_score, f1_score
+from sklearn.metrics import f1_score
 
 import random
 import numpy.random as npr
@@ -18,6 +18,10 @@ from Encoder import Encoder
 import CallBacks
 from datasetGenerator import DCASE2018
 
+# evaluate
+from evaluation_measures import event_based_evaluation
+from dcase_util.containers import MetaDataContainer
+
 
 def modelAlreadyTrained(modelPath: str) -> bool:
     print(modelPath)
@@ -30,7 +34,6 @@ def modelAlreadyTrained(modelPath: str) -> bool:
         return False
 
     return True
-
 
 if __name__ == '__main__':
     # ==================================================================================================================
@@ -189,6 +192,10 @@ if __name__ == '__main__':
             (dataset.trainingDataset["mel"]["output"], dataset.validationDataset["mel"]["output"])),
     }
 
+    # ==================================================================================================================
+    #   Train new model with extended dataset (reset the weight)
+    # ==================================================================================================================
+    model = Models.load(dirPath, load_weight = False)
     #optimizer.lr = 0.00001  # 100 times smaller than the Adam default (0.001)
     model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
     model.fit(
@@ -212,23 +219,33 @@ if __name__ == '__main__':
     best["transfer weight"] = model.get_weights()
     best["transfer f1"] = f1
 
-    # save the new model with the _tranfer extension
-    Models.save(dirPath + "_transfer", model)
+    # save the new model with the _2 extension
+    Models.save(dirPath + "_2", model)
 
-    print("======== COMPARISON BEFORE AND AFTER TRANSFER ========")
-    print("%-*s" % (10, "MODEL") )
-    for i in range(len(best["original f1"])):
-        if i == 0:
-            print("%-*s" % (10, "ORIG"), end="")
-            print("%-*.4f" % (10, f1[i]), end="")
-        print("%-*.4f" % (10, f1[i]), end="")
-    print("")
-    for i in range(len(best["transfer f1"])):
-        if i == 0:
-            print("%-*s" % (10, "TRANS"), end="")
-            print("%-*.4f" % (10, f1[i]), end="")
-        print("%-*.4f" % (10, f1[i]), end="")
-    print("")
+    # ==================================================================================================================
+    #   STRONG ANNOTATION stage and evaluation
+    # ==================================================================================================================
+    tPrediction = model.predict(dataset.testingDataset["mel"]["input"])
 
+    encoder = Encoder()
+    segments = encoder.encode(tPrediction, method="threshold", smooth="smoothMovingAvg")
+    toEvaluate = encoder.parse(segments, dataset.testFileList)
 
+    print("perform evaluation ...")
+    with open("toEvaluate.csv", "w") as f:
+        f.write("filename\tonset\toffset\tevent_label\n")
+        f.write(toEvaluate)
+
+    perso_event_list = MetaDataContainer()
+    perso_event_list.load(filename="perso_eval.csv")
+
+    ref_event_list = MetaDataContainer()
+    ref_event_list.load(filename="../../meta/test.csv")
+
+    event_based_metric = event_based_evaluation(ref_event_list, perso_event_list)
+    print(event_based_metric)
+
+    print("Saving final results in final_results.txt")
+    with open("final_results", "w") as f:
+        f.write(event_based_metric)
 
