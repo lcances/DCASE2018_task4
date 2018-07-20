@@ -1,3 +1,6 @@
 [submodule "demo-zca"]
 	path = demo-zca
 	url = git@github.com:leocances/demo-zca.git
+[submodule "CLR"]
+	path = CLR
+	url = https://github.com/bckenstler/CLR.git
