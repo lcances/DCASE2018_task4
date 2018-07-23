@@ -24,7 +24,30 @@ def save(dirPath: str, model: Model, transfer: bool = False):
     if transfer:
         open(dirPath + "_transfer", "w").write("")
 
-def crnn_mel64_tr2(dataset: DCASE2018, wgru: bool = False) -> Model:
+def useWGRU(model: Model) -> Model:
+    weights = model.get_weights()
+
+    layers = [l for l in model.layers]
+
+    x = layers[0].output
+    for i in range(1, len(layers)):
+        if layers[i].name[:5] == "bidir":
+            x = Bidirectional(
+                GRU(kernel_initializer='glorot_uniform', recurrent_dropout=0.0, dropout=0.3,
+                    units=64, return_sequences=True, temporal_weight=0.25)
+            )(x)
+
+        elif layers[i].name[:5] == "time_":
+            timeName = layers[i].name
+            x = TimeDistributed( Dense(10, activation="sigmoid") )(x)
+
+        else:
+            x = layers[i](x)
+
+    newModel = Model(input=layers[0].input, output = x)
+    return Model(input=newModel.input, output=newModel.get_layer(timeName).output)
+
+def crnn_mel64_tr2(dataset: DCASE2018) -> Model:
     melInput = Input(dataset.getInputShape("mel"))
 
     # ---- mel convolution part ----
@@ -49,14 +72,9 @@ def crnn_mel64_tr2(dataset: DCASE2018, wgru: bool = False) -> Model:
     targetShape = int(mBlock2.shape[1] * mBlock2.shape[2])
     mReshape = Reshape(target_shape=(targetShape, 64))(mBlock2)
 
-    if not wgru:
-        gru = Bidirectional(
-            GRU(kernel_initializer='glorot_uniform', recurrent_dropout=0.0, dropout=0.3, units=64, return_sequences=True)
-        )(mReshape)
-    else:
-        gru = Bidirectional(
-            GRU(kernel_initializer='glorot_uniform', recurrent_dropout=0.0, dropout=0.3, units=64, return_sequences=True)
-        )(mReshape)
+    gru = Bidirectional(
+        GRU(kernel_initializer='glorot_uniform', recurrent_dropout=0.0, dropout=0.3, units=64, return_sequences=True)
+    )(mReshape)
 
     output = TimeDistributed(
         Dense(dataset.nbClass, activation="sigmoid"),
