@@ -2,8 +2,10 @@ from datasetGenerator import DCASE2018
 
 import keras.utils
 from keras.layers import Reshape, BatchNormalization, Activation, MaxPooling2D, Conv2D, Dropout, GRU, Dense
-from keras.layers import Input, Bidirectional, TimeDistributed, GlobalAveragePooling1D, Concatenate
+from keras.layers import Input, Bidirectional, TimeDistributed, GlobalAveragePooling1D, Concatenate, GRUCell
 from keras.models import Model, model_from_json
+from keras import backend as K
+from keras import regularizers
 
 def load(dirPath: str) -> Model:
     with open(dirPath + "_model.json", "r") as modelJsonFile:
@@ -23,6 +25,200 @@ def save(dirPath: str, model: Model, transfer: bool = False):
 
     if transfer:
         open(dirPath + "_transfer", "w").write("")
+
+
+class CustomGRUCell(GRUCell):
+
+    def __init__(self, units, activation='tanh', recurrent_activation='hard_sigmoid', use_bias=True,
+                 kernel_initializer='glorot_uniform', recurrent_initializer='orthogonal', bias_initializer='zeros',
+                 kernel_regularizer=None, recurrent_regularizer=None, bias_regularizer=None, kernel_constraint=None,
+                 recurrent_constraint=None, bias_constraint=None, dropout=0., recurrent_dropout=0., implementation=1,
+                 reset_after=False, temporal_weight: float = 0.5, **kwargs):
+
+        self.temporal_weight = temporal_weight
+
+        super().__init__(units, activation, recurrent_activation, use_bias, kernel_initializer, recurrent_initializer,
+                         bias_initializer, kernel_regularizer, recurrent_regularizer, bias_regularizer,
+                         kernel_constraint, recurrent_constraint, bias_constraint, dropout, recurrent_dropout,
+                         implementation, reset_after, **kwargs)
+
+        print("Temporal weight : ", self.temporal_weight)
+
+    def call(self, inputs, states, training=None):
+        h_tm1 = states[0]  # previous memory
+
+        # if 0 < self.dropout < 1 and self._dropout_mask is None:
+        #     self._dropout_mask = _generate_dropout_mask(
+        #         K.ones_like(inputs),
+        #         self.dropout,
+        #         training=training,
+        #         count=3)
+        # if (0 < self.recurrent_dropout < 1 and
+        #         self._recurrent_dropout_mask is None):
+        #     self._recurrent_dropout_mask = _generate_dropout_mask(
+        #         K.ones_like(h_tm1),
+        #         self.recurrent_dropout,
+        #         training=training,
+        #         count=3)
+
+        # dropout matrices for input units
+        dp_mask = self._dropout_mask
+        # dropout matrices for recurrent units
+        rec_dp_mask = self._recurrent_dropout_mask
+
+        if self.implementation == 1:
+            if 0. < self.dropout < 1.:
+                inputs_z = inputs * dp_mask[0]
+                inputs_r = inputs * dp_mask[1]
+                inputs_h = inputs * dp_mask[2]
+            else:
+                inputs_z = inputs
+                inputs_r = inputs
+                inputs_h = inputs
+
+            x_z = K.dot(inputs_z, self.kernel_z)
+            x_r = K.dot(inputs_r, self.kernel_r)
+            x_h = K.dot(inputs_h, self.kernel_h)
+            if self.use_bias:
+                x_z = K.bias_add(x_z, self.input_bias_z)
+                x_r = K.bias_add(x_r, self.input_bias_r)
+                x_h = K.bias_add(x_h, self.input_bias_h)
+
+            if 0. < self.recurrent_dropout < 1.:
+                h_tm1_z = h_tm1 * self.temporal_weight  # rec_dp_mask[0]
+                h_tm1_r = h_tm1 * self.temporal_weight  # rec_dp_mask[1]
+                h_tm1_h = h_tm1 * self.temporal_weight  # rec_dp_mask[2]
+            else:
+                h_tm1_z = h_tm1 * self.temporal_weight
+                h_tm1_r = h_tm1 * self.temporal_weight
+                h_tm1_h = h_tm1 * self.temporal_weight
+
+            recurrent_z = K.dot(h_tm1_z, self.recurrent_kernel_z)
+            recurrent_r = K.dot(h_tm1_r, self.recurrent_kernel_r)
+            if self.reset_after and self.use_bias:
+                recurrent_z = K.bias_add(recurrent_z, self.recurrent_bias_z)
+                recurrent_r = K.bias_add(recurrent_r, self.recurrent_bias_r)
+
+            z = self.recurrent_activation(x_z + recurrent_z)
+            r = self.recurrent_activation(x_r + recurrent_r)
+
+            # reset gate applied after/before matrix multiplication
+            if self.reset_after:
+                recurrent_h = K.dot(h_tm1_h, self.recurrent_kernel_h)
+                if self.use_bias:
+                    recurrent_h = K.bias_add(recurrent_h, self.recurrent_bias_h)
+                recurrent_h = r * recurrent_h
+            else:
+                recurrent_h = K.dot(r * h_tm1_h, self.recurrent_kernel_h)
+
+            hh = self.activation(x_h + recurrent_h)
+        else:
+            if 0. < self.dropout < 1.:
+                inputs *= dp_mask[0]
+
+            # inputs projected by all gate matrices at once
+            matrix_x = K.dot(inputs, self.kernel)
+            if self.use_bias:
+                # biases: bias_z_i, bias_r_i, bias_h_i
+                matrix_x = K.bias_add(matrix_x, self.input_bias)
+            x_z = matrix_x[:, :self.units]
+            x_r = matrix_x[:, self.units: 2 * self.units]
+            x_h = matrix_x[:, 2 * self.units:]
+
+            if 0. < self.recurrent_dropout < 1.:
+                h_tm1 *= rec_dp_mask[0]
+
+            if self.reset_after:
+                # hidden state projected by all gate matrices at once
+                matrix_inner = K.dot(h_tm1, self.recurrent_kernel)
+                if self.use_bias:
+                    matrix_inner = K.bias_add(matrix_inner, self.recurrent_bias)
+            else:
+                # hidden state projected separately for update/reset and new
+                matrix_inner = K.dot(h_tm1,
+                                     self.recurrent_kernel[:, :2 * self.units])
+
+            recurrent_z = matrix_inner[:, :self.units]
+            recurrent_r = matrix_inner[:, self.units: 2 * self.units]
+
+            z = self.recurrent_activation(x_z + recurrent_z)
+            r = self.recurrent_activation(x_r + recurrent_r)
+
+            if self.reset_after:
+                recurrent_h = r * matrix_inner[:, 2 * self.units:]
+            else:
+                recurrent_h = K.dot(r * h_tm1,
+                                    self.recurrent_kernel[:, 2 * self.units:])
+
+            hh = self.activation(x_h + recurrent_h)
+
+        # previous and candidate state mixed by update gate
+        h = z * h_tm1 + (1 - z) * hh
+
+        if 0 < self.dropout + self.recurrent_dropout:
+            if training is None:
+                h._uses_learning_phase = True
+
+        return h, [h]
+
+
+class CustomGRU(GRU):
+
+    def __init__(self, units, activation='tanh', recurrent_activation='hard_sigmoid', use_bias=True,
+                 kernel_initializer='glorot_uniform', recurrent_initializer='orthogonal', bias_initializer='zeros',
+                 kernel_regularizer=None, recurrent_regularizer=None, bias_regularizer=None, activity_regularizer=None,
+                 kernel_constraint=None, recurrent_constraint=None, bias_constraint=None, dropout=0.,
+                 recurrent_dropout=0., implementation=1, return_sequences=False, return_state=False, go_backwards=False,
+                 stateful=False, unroll=False, reset_after=False, temporal_weight: float = 0.5, **kwargs):
+        """
+        super().__init__(units, activation=activation, recurrent_activation=recurrent_activation,
+                         use_bias=use_bias, kernel_initializer=kernel_initializer, recurrent_initializer=recurrent_initializer,
+                         bias_initializer=bias_initializer, kernel_regularizer=kernel_regularizer,
+                         recurrent_regularizer=recurrent_regularizer, bias_regularizer=bias_regularizer,
+                         activity_regularizer=activity_regularizer, kernel_constraint=kernel_constraint,
+                         recurrent_constraint=recurrent_constraint, bias_constraint=bias_constraint,
+                         dropout=dropout, recurrent_dropout=recurrent_dropout, implementation=implementation,
+                         return_sequences=return_sequences, return_state=return_state, go_backwards=go_backwards,
+                         stateful=stateful, unroll=unroll, reset_after=reset_after, **kwargs)
+        """
+
+        self.temporal_weight = temporal_weight
+
+        cell = CustomGRUCell(units,
+                             activation=activation,
+                             recurrent_activation=recurrent_activation,
+                             use_bias=use_bias,
+                             kernel_initializer=kernel_initializer,
+                             recurrent_initializer=recurrent_initializer,
+                             bias_initializer=bias_initializer,
+                             kernel_regularizer=kernel_regularizer,
+                             recurrent_regularizer=recurrent_regularizer,
+                             bias_regularizer=bias_regularizer,
+                             kernel_constraint=kernel_constraint,
+                             recurrent_constraint=recurrent_constraint,
+                             bias_constraint=bias_constraint,
+                             dropout=dropout,
+                             recurrent_dropout=recurrent_dropout,
+                             implementation=implementation,
+                             reset_after=reset_after,
+                             temporal_weight=temporal_weight)
+
+        super(GRU, self).__init__(cell,
+                                  return_sequences=return_sequences,
+                                  return_state=return_state,
+                                  go_backwards=go_backwards,
+                                  stateful=stateful,
+                                  unroll=unroll,
+                                  **kwargs)
+        self.activity_regularizer = regularizers.get(activity_regularizer)
+
+    def get_config(self):
+        config = super().get_config()
+        config["temporal_weight"] = self.temporal_weight
+        return config
+
+    def call(self, inputs, mask=None, training=None, initial_state=None):
+        return super().call(inputs, mask, True, initial_state)
 
 def crnn_mel64_tr2(dataset: DCASE2018, wgru: bool = False) -> Model:
     melInput = Input(dataset.getInputShape("mel"))
@@ -55,7 +251,9 @@ def crnn_mel64_tr2(dataset: DCASE2018, wgru: bool = False) -> Model:
         )(mReshape)
     else:
         gru = Bidirectional(
-            GRU(kernel_initializer='glorot_uniform', recurrent_dropout=0.0, dropout=0.3, units=64, return_sequences=True)
+            CustomGRU(kernel_initializer='glorot_uniform', recurrent_dropout=0.0, dropout=0.3, units=64,
+                      temporal_weight=0.25,
+                      return_sequences=True)
         )(mReshape)
 
     output = TimeDistributed(
