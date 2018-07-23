@@ -115,7 +115,7 @@ if __name__ == '__main__':
     #           - if not already done
     # ==================================================================================================================
     # hyperparameters
-    epochs = 100
+    epochs = 200
     batch_size = 32
     metrics = ["accuracy", Metrics.f1]
     loss = "binary_crossentropy"
@@ -124,7 +124,8 @@ if __name__ == '__main__':
 
     completeLogger = CallBacks.CompleteLogger(
         logPath=dirPath,
-        validation_data=(dataset.validationDataset["mel"]["input"], dataset.validationDataset["mel"]["output"])
+        validation_data=(dataset.validationDataset["mel"]["input"], dataset.validationDataset["mel"]["output"]),
+        fallback = True
     )
 
     callbacks = [completeLogger]
@@ -148,7 +149,7 @@ if __name__ == '__main__':
         )
 
         # save best model (callback history)
-        model.set_weights(completeLogger.history[0]["weights"])
+        model.set_weights(completeLogger.sortedHistory[0]["weights"])
         Models.save(dirPath, model)
 
     else:
@@ -252,10 +253,11 @@ if __name__ == '__main__':
     # ==================================================================================================================
     if args.uid:
         model2.summary()
-        tModel = Model(input=model2.input, output=model2.get_layer("time_distributed_2").output)
+        tModel = Models.useWGRU(dirPath)
+
     else:
         model.summary()
-        tModel = Model(input=model.input, output=model.get_layer("time_distributed_1").output)
+        tModel = Models.useWGRU(dirPath)
 
     tPrediction = tModel.predict(dataset.testingDataset["mel"]["input"])
 
