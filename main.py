@@ -263,7 +263,6 @@ if __name__ == '__main__':
     segments = encoder.encode(tPrediction, method="threshold")#, smooth="smoothMovingAvg")
     toEvaluate = encoder.parse(segments, dataset.testFileList)
 
-    print(toEvaluate)
     print("perform evaluation ...")
     with open("toEvaluate.csv", "w") as f:
         f.write("filename\tonset\toffset\tevent_label\n")
@@ -276,7 +275,8 @@ if __name__ == '__main__':
     ref_event_list.load(filename=dataset.meta_test)
 
     event_based_metric = event_based_evaluation(ref_event_list, perso_event_list)
+    print(event_based_metric)
 
     print("Saving final results in final_results.txt")
     with open("final_results", "w") as f:
-        f.write(str(vent_based_metric))
+        f.write(str(event_based_metric))
