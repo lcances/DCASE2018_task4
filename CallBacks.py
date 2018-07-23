@@ -9,7 +9,10 @@ from Binarizer import Binarizer
 
 
 class CompleteLogger(Callback):
-    def __init__(self, logPath: str, validation_data: tuple, history_size: int = 3):
+    def __init__(self, logPath: str, validation_data: tuple, history_size: int = 10,
+            fallback: bool = False, fallBackThreshold: int = 5, stopAt: int = 200,
+            ):
+
         super().__init__()
 
         self.validation_input = validation_data[0]
@@ -29,6 +32,11 @@ class CompleteLogger(Callback):
 
         self.history_size = history_size
         self.history = []       # a history of the best models
+        self.sortedHistory = []
+
+        self.fallbackTh = fallBackThreshold
+        self.nbFallback = 0
+        self.nbMaxFallback = 3
 
         self.transferMode = False
         self.binarizer = Binarizer()
@@ -63,9 +71,10 @@ class CompleteLogger(Callback):
         super().on_epoch_begin(epoch, logs)
         self.currentEpoch += 1
 
-        if self.currentEpoch == 35:
-            currentLr = K.get_value(self.model.optimizer.lr)
-            K.set_value(self.model.optimizer.lr, currentLr / 2)
+
+#        if self.currentEpoch == 35:
+#            currentLr = K.get_value(self.model.optimizer.lr)
+#            K.set_value(self.model.optimizer.lr, currentLr / 2)
 
         self.epochStart = time.time()
 
@@ -83,6 +92,8 @@ class CompleteLogger(Callback):
         self.__logGeneralEpoch(logs)
         self.__logClassesEpoch()
 
+        self.__fallingBack()
+
     # ==================================================================================================================
     #       Classes metrics compute
     # ==================================================================================================================
@@ -97,24 +108,45 @@ class CompleteLogger(Callback):
         self.recall = recall_score(self.validation_output, prediction, average=None)
         self.f1 = f1_score(self.validation_output, prediction, average=None)
 
-
     # ==================================================================================================================
-    #       LOG FUNCTIONS
+    #       HISTORY AND FALLBACK FUNCTION
     # ==================================================================================================================
     def __toHistory(self):
         average_f1 = self.f1.mean()
 
         # add the current model to the list of history
         self.history.append( {"weights": self.model.get_weights(), "average f1": average_f1, "epoch": self.currentEpoch} )
+        self.sortedHistory.append( {"weights": self.model.get_weights(), "average f1": average_f1, "epoch": self.currentEpoch} )
 
         # sort the list using the average f1 key
-        self.history = sorted(self.history, key=lambda k: k['average f1'])
+        self.sortedHistory = sorted(self.history, key=lambda k: k['average f1'])
 
         # keep only the <history_size> first
         self.history = self.history[:self.history_size]
+        self.sortedHistory = self.sortedHistory[:self.history_size]
 
+    def __fallingBack(self) -> bool:
+        if self.nbFallback == self.nbMaxFallback:
+            return;
 
+        if self.currentEpoch < self.history_size:
+            return;
 
+        far = self.history[-1]
+        middle = self.history[int(self.history_size / 2)]
+
+        farDiff = self.f1.mean() - far["average f1"]
+        middleDiff = self.f1.mean() - middle["average f1"]
+
+        if farDiff > self.fallbackTh and middleDiff > self.fallbackTh:
+            # smaller learning rate
+            currentLr = K.get_value(self.model.optimizer.lr)
+            K.set_value(self.model.optimizer.lr, currentLr * 0.75)
+
+            # fallback to <far> epoch
+            self.model.set_weights(far["weights"])
+
+            print("FALL BACK TO epoch %s" % (self.currentEpoch - self.history_size))
 
     # ==================================================================================================================
     #       LOG FUNCTIONS
@@ -132,6 +164,7 @@ class CompleteLogger(Callback):
             os.makedirs(dirName)
 
         # add one files for each metrics that will be compute for classes
+
         self.logPath["precision"] = dirPath + "_precision.csv"
         self.logPath["recall"] = dirPath + "_recall.csv"
         self.logPath["f1"] = dirPath + "_f1.csv"
