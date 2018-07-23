@@ -16,8 +16,10 @@ import Metrics
 from Binarizer import Binarizer
 from Encoder import Encoder
 import CallBacks
-from CLR import clr_callback
+from CLR.clr_callback import CyclicLR
 from datasetGenerator import DCASE2018
+from keras import backend as K
+from keras.models import Model
 
 # evaluate
 from evaluation_measures import event_based_evaluation
@@ -55,6 +57,7 @@ if __name__ == '__main__':
     parser.add_argument("--output_model", help="basename for save file of the model")
     parser.add_argument("--meta_root", help="Path to the meta directory")
     parser.add_argument("--features_root", help="Path to the features directory")
+    parser.add_argument("-uid", help="Use unlabel in domain dataset", action="store_true")
     parser.add_argument("-retrain", help="Force retrain model", action="store_true")
     parser.add_argument("-w", help="If set, display the warnigs", action="store_true")
     args = parser.parse_args()
@@ -114,9 +117,9 @@ if __name__ == '__main__':
     # hyperparameters
     epochs = 100
     batch_size = 32
-    metrics = ["binary_accuracy", Metrics.precision, Metrics.recall, Metrics.f1]
+    metrics = ["accuracy", Metrics.f1]
     loss = "binary_crossentropy"
-    optimizer = Adam()
+    optimizer = Adam(lr=0.0005)
     print("default lr: ", optimizer.lr)
 
     completeLogger = CallBacks.CompleteLogger(
@@ -124,10 +127,7 @@ if __name__ == '__main__':
         validation_data=(dataset.validationDataset["mel"]["input"], dataset.validationDataset["mel"]["output"])
     )
 
-    trainingIterationPerEpoch = len(dataset.trainingDataset["mel"]["input"]) / batch_size
-    clrCallback = clr_callback(base_lr = 0.005, max_lr = 0.006, step_size = trainingIterationPerEpoch, mode='triangular2')
-
-    callbacks = [completeLogger, clrCallback]
+    callbacks = [completeLogger]
 
     model = Models.crnn_mel64_tr2(dataset)
 
@@ -178,93 +178,105 @@ if __name__ == '__main__':
     # ==================================================================================================================
     #       Optimize thesholds using the validation dataset
     # ==================================================================================================================
-    if not transferAlreadyDone(dirPath) or args.training:
-        # load the unlabel_in_domain features
-        print("Loading the unlabel in domain dataset ...")
-        uid_features = dataset.loadUID()
+    if args.uid:
+        if not transferAlreadyDone(dirPath) or args.retrain:
+            # load the unlabel_in_domain features
+            print("Loading the unlabel in domain dataset ...")
+            uid_features = dataset.loadUID()
 
-        # Predict the complete unlabel_in_domain dataset and use it to expand the training dataset
-        print("Predicting the unlabel in domain dataset ...")
-        toPredict = [uid_features[f] for f in feat]
-        prediction = model.predict(toPredict)
+            # Predict the complete unlabel_in_domain dataset and use it to expand the training dataset
+            print("Predicting the unlabel in domain dataset ...")
+            toPredict = [uid_features[f] for f in feat]
+            prediction = model.predict(toPredict)
+            binPrediction = binarizer.binarize(prediction)
+
+            print("Expand training dataset and re-training ...")
+            dataset.expandWithUID(uid_features, binPrediction)
+
+            # use both weak dataset and unlabel in domain dataset as training dataset
+            forTraining = {
+                "input": np.concatenate(
+                    (dataset.trainingDataset["mel"]["input"], dataset.trainingUidDataset["mel"]["input"])),
+                "output": np.concatenate(
+                    (dataset.trainingDataset["mel"]["output"], dataset.trainingUidDataset["mel"]["output"]))
+            }
+
+            # use the whole weak dataset as validation dataset
+            forValidation = {
+                "input": np.concatenate(
+                    (dataset.trainingDataset["mel"]["input"], dataset.validationDataset["mel"]["input"])),
+                "output": np.concatenate(
+                    (dataset.trainingDataset["mel"]["output"], dataset.validationDataset["mel"]["output"])),
+            }
+
+            # ==================================================================================================================
+            #   Train new model with extended dataset (reset the weight)
+            # ==================================================================================================================
+            trainingIterationPerEpoch = len(forTraining["input"]) / batch_size
+            clrCallback = CyclicLR(base_lr = 0.0005, max_lr = 0.003, step_size = trainingIterationPerEpoch, mode='triangular2')
+
+            callbacks.append(clrCallback)
+
+            model2 = Models.crnn_mel64_tr2(dataset)
+            model2.compile(loss=loss, optimizer=optimizer, metrics=metrics)
+            model2.fit(
+                x=forTraining["input"],
+                y=forTraining["output"],
+                epochs=100,
+                validation_data=(
+                    forValidation["input"],
+                    forValidation["output"]
+                ),
+                batch_size=128,
+                callbacks=callbacks,
+                verbose=0
+            )
+
+            # save the new model with the _2 extension
+            Models.save(dirPath + "_2", model2)
+
+        else:
+            print("Transfer already done, loading saved model ...")
+            model2 = Models.load(dirPath + "_2")
+
+        # compute f1 score and same (for later comparison)
+        print("Compute the final f1 score ...")
+        prediction = model2.predict(dataset.validationDataset[feat[0]]["input"])
         binPrediction = binarizer.binarize(prediction)
-
-        print("Expand training dataset and re-training ...")
-        dataset.expandWithUID(uid_features, binPrediction)
-
-        # use both weak dataset and unlabel in domain dataset as training dataset
-        forTraining = {
-            "input": np.concatenate(
-                (dataset.trainingDataset["mel"]["input"], dataset.trainingUidDataset["mel"]["input"])),
-            "output": np.concatenate(
-                (dataset.trainingDataset["mel"]["output"], dataset.trainingUidDataset["mel"]["output"]))
-        }
-
-        # use the whole weak dataset as validation dataset
-        forValidation = {
-            "input": np.concatenate(
-                (dataset.trainingDataset["mel"]["input"], dataset.validationDataset["mel"]["input"])),
-            "output": np.concatenate(
-                (dataset.trainingDataset["mel"]["output"], dataset.validationDataset["mel"]["output"])),
-        }
-
-        # ==================================================================================================================
-        #   Train new model with extended dataset (reset the weight)
-        # ==================================================================================================================
-        model = Models.crnn_mel64_tr2(dataset)
-
-        model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
-        model.fit(
-            x=forTraining["input"],
-            y=forTraining["output"],
-            epochs=100,
-            validation_data=(
-                forValidation["input"],
-                forValidation["output"]
-            ),
-            batch_size=128,
-            callbacks=callbacks,
-            verbose=0
-        )
-
-        # save the new model with the _2 extension
-        Models.save(dirPath + "_2", model)
-
-    else:
-        print("Transfer already done, loading saved model ...")
-        model = Models.load(dirPath + "_2")
-
-    # compute f1 score and same (for later comparison)
-    print("Compute the final f1 score ...")
-    prediction = model.predict(dataset.validationDataset[feat[0]]["input"])
-    binPrediction = binarizer.binarize(prediction)
-    f1 = f1_score(dataset.validationDataset[feat[0]]["output"], binPrediction, average=None)
-    best["transfer weight"] = model.get_weights()
-    best["transfer f1"] = f1
+        f1 = f1_score(dataset.validationDataset[feat[0]]["output"], binPrediction, average=None)
+        best["transfer weight"] = model.get_weights()
+        best["transfer f1"] = f1
 
     # ==================================================================================================================
     #   STRONG ANNOTATION stage and evaluation
     # ==================================================================================================================
-    tPrediction = model.predict(dataset.testingDataset["mel"]["input"])
+    if args.uid:
+        model2.summary()
+        tModel = Model(input=model2.input, output=model2.get_layer("time_distributed_2").output)
+    else:
+        model.summary()
+        tModel = Model(input=model.input, output=model.get_layer("time_distributed_1").output)
+
+    tPrediction = tModel.predict(dataset.testingDataset["mel"]["input"])
 
     encoder = Encoder()
-    segments = encoder.encode(tPrediction, method="threshold", smooth="smoothMovingAvg")
+    segments = encoder.encode(tPrediction, method="threshold")#, smooth="smoothMovingAvg")
     toEvaluate = encoder.parse(segments, dataset.testFileList)
 
+    print(toEvaluate)
     print("perform evaluation ...")
     with open("toEvaluate.csv", "w") as f:
         f.write("filename\tonset\toffset\tevent_label\n")
         f.write(toEvaluate)
 
     perso_event_list = MetaDataContainer()
-    perso_event_list.load(filename="perso_eval.csv")
+    perso_event_list.load(filename="toEvaluate.csv")
 
     ref_event_list = MetaDataContainer()
-    ref_event_list.load(filename="../../meta/test.csv")
+    ref_event_list.load(filename=dataset.meta_test)
 
     event_based_metric = event_based_evaluation(ref_event_list, perso_event_list)
-    print(event_based_metric)
 
     print("Saving final results in final_results.txt")
     with open("final_results", "w") as f:
-        f.write(event_based_metric)
+        f.write(str(vent_based_metric))

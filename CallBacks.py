@@ -1,4 +1,5 @@
 from keras.callbacks import Callback
+from keras import backend as K
 from sklearn.metrics import precision_score, recall_score, f1_score
 
 import time
@@ -61,6 +62,10 @@ class CompleteLogger(Callback):
     def on_epoch_begin(self, epoch, logs=None):
         super().on_epoch_begin(epoch, logs)
         self.currentEpoch += 1
+
+        if self.currentEpoch == 35:
+            currentLr = K.get_value(self.model.optimizer.lr)
+            K.set_value(self.model.optimizer.lr, currentLr / 2)
 
         self.epochStart = time.time()
 

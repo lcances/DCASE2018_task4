@@ -34,20 +34,20 @@ def crnn_mel64_tr2(dataset: DCASE2018) -> Model:
     mBlock1 = MaxPooling2D(pool_size=(4, 2))(mBlock1)
     mBlock1 = Dropout(0.5)(mBlock1)
 
-    mBlock2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(mBlock1)
+    mBlock2 = Conv2D(filters=64, kernel_size=(5, 5), padding="same")(mBlock1)
     mBlock2 = BatchNormalization()(mBlock2)
     mBlock2 = Activation(activation="relu")(mBlock2)
     mBlock2 = MaxPooling2D(pool_size=(4, 1))(mBlock2)
     mBlock2 = Dropout(0.5)(mBlock2)
 
-    mBlock3 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(mBlock2)
-    mBlock3 = BatchNormalization()(mBlock3)
-    mBlock3 = Activation(activation="relu")(mBlock3)
-    mBlock3 = MaxPooling2D(pool_size=(4, 1))(mBlock3)
-    mBlock3 = Dropout(0.5)(mBlock3)
+    mBlock2 = Conv2D(filters=64, kernel_size=(5, 5), padding="same")(mBlock2)
+    mBlock2 = BatchNormalization()(mBlock2)
+    mBlock2 = Activation(activation="relu")(mBlock2)
+    mBlock2 = MaxPooling2D(pool_size=(4, 1))(mBlock2)
+    mBlock2 = Dropout(0.5)(mBlock2)
 
-    targetShape = int(mBlock3.shape[1] * mBlock3.shape[2])
-    mReshape = Reshape(target_shape=(targetShape, 64))(mBlock3)
+    targetShape = int(mBlock2.shape[1] * mBlock2.shape[2])
+    mReshape = Reshape(target_shape=(targetShape, 64))(mBlock2)
 
     gru = Bidirectional(
         GRU(kernel_initializer='glorot_uniform', recurrent_dropout=0.0, dropout=0.3, units=64, return_sequences=True)

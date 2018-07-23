@@ -1,4 +1,4 @@
-import sys
+import sys, os
 import numpy as np
 import copy
 
@@ -117,7 +117,7 @@ class Encoder:
         elif method == _methods[3]: encoder = self.__encodeUsingPrimitive
         else:
             sys.exit(1)
-        
+
         if smooth is not None:
             self.__smooth(temporalPrediction, method=smooth, **kwargs)
 
@@ -436,7 +436,7 @@ class Encoder:
                 for segment in clip[cls]:
                     if segment[0] == 1.0:
                         output += "%s\t%f\t%f\t%s\n" % (
-                            testFilesName[clipIndex][:-4],
+                            os.path.basename(testFilesName[clipIndex])[:-4],
                             start * self.frameLength,
                             (start + segment[1]) * self.frameLength,
                             DCASE2018.class_correspondance_reverse[cls]

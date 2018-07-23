@@ -97,16 +97,21 @@ class DCASE2018:
         self.validationDataset[feature]["input"] = np.array(self.validationDataset[feature]["input"])
         self.trainingDataset[feature]["output"] = np.array(self.trainingDataset[feature]["output"])
         self.validationDataset[feature]["output"] = np.array(self.validationDataset[feature]["output"])
+        self.testingDataset[feature]["input"] = np.array(self.testingDataset[feature]["input"])
+        self.testingDataset[feature]["output"] = np.array(self.testingDataset[feature]["output"])
+
 
         # normalization
         if self.normalizer is not None:
             print("==== Normalization stage ====")
             self.trainingDataset[feature]["input"] = self.normalizer.fit_transform(self.trainingDataset[feature]["input"])
             self.validationDataset[feature]["input"] = self.normalizer.fit_transform(self.validationDataset[feature]["input"])
+            self.testingDataset[feature]["input"] = self.normalizer.fit_transform(self.testingDataset[feature]["input"])
 
         # extend dataset to have enough dim for conv2D
         self.trainingDataset[feature]["input"] = np.expand_dims(self.trainingDataset[feature]["input"], axis=-1)
         self.validationDataset[feature]["input"] = np.expand_dims(self.validationDataset[feature]["input"], axis=-1)
+        self.testingDataset[feature]["input"] = np.expand_dims(self.testingDataset[feature]["input"], axis=-1)
 
     def __loadMeta(self):
         """ Load the metadata for all subset of the DCASE2018 task4 dataset"""
@@ -244,13 +249,15 @@ class DCASE2018:
         # load the features
         for info in self.metadata["test"]:
             pathList = info[0]
-            pathList[3] = feature
+            pathList[2] = feature
             path = os.path.join(*pathList) + ".npy"
             self.testFileList.append(path)
 
             if os.path.isfile(path):
                 feat = np.load(path)
+
                 self.testingDataset[feature]["input"].append(feat)
+
 
     def getInputShape(self, feature):
         shape = self.trainingDataset[feature]["input"][0].shape
