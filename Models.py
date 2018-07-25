@@ -261,7 +261,6 @@ def useWGRU(modelPath: str) -> Model:
     return Model(input=newModel.input, output=newModel.get_layer("time_distributed_1").output)
 
 
-
 def crnn_mel64_tr2(dataset: DCASE2018) -> Model:
     melInput = Input(dataset.getInputShape("mel"))
 
@@ -360,6 +359,8 @@ def dense_crnn_mel64_tr2(dataset: DCASE2018) -> Model:
         conv = BatchNormalization()(entry)
         conv = Activation(activation="relu")(conv)
         conv = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(conv)
+        conv = Dropout(0.5)(conv)
+        #att = SpatialDropout2D(0.15, data_format="channels_last")(att)
 
         return conv
 
