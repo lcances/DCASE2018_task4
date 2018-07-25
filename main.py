@@ -18,8 +18,6 @@ from Encoder import Encoder
 import CallBacks
 from CLR.clr_callback import CyclicLR
 from datasetGenerator import DCASE2018
-from keras import backend as K
-from keras.models import Model
 
 # evaluate
 from evaluation_measures import event_based_evaluation
@@ -132,7 +130,8 @@ if __name__ == '__main__':
 
     # compile & fit model
     if not modelAlreadyTrained(dirPath) or args.retrain:
-        model = Models.crnn_mel64_tr2(dataset)
+        #model = Models.crnn_mel64_tr2(dataset)
+        model = Models.dense_crnn_mel64_tr2(dataset)
 
         model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
         model.fit(
@@ -230,7 +229,9 @@ if __name__ == '__main__':
 
             callbacks.append(clrCallback)
 
-            model2 = Models.crnn_mel64_tr2(dataset)
+            model2 = Models.dense_crnn_mel64_tr2(dataset)
+            #model2 = Models.crnn_mel64_tr2(dataset)
+
             model2.compile(loss=loss, optimizer=optimizer, metrics=metrics)
             model2.fit(
                 x=forTraining["input"],
