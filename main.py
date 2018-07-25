@@ -265,16 +265,53 @@ if __name__ == '__main__':
     # ==================================================================================================================
     if args.uid:
         model2.summary()
-        tModel = Models.useWGRU(dirPath+"_2")
+        gModel = model2
+        tModel = Model(input=model2.input, output=model2.get_layer("time_distributed_2").output)
+        twModel = Models.useWGRU(dirPath+"_2")
 
     else:
         model.summary()
-        tModel = Models.useWGRU(dirPath)
+        gModel = model
+        tModel = Model(input=model.input, output=model.get_layer("time_distributed_1").output)
+        twModel = Models.useWGRU(dirPath)
 
+    # global prediction
+    #gPrediction = gModel.predict(dataset.testingDataset["mel"]["input"])
+    #gbPrediction = binarizer.binarize(gPrediction)
+
+    # temporal prediction using both WGRU and GRU
     tPrediction = tModel.predict(dataset.testingDataset["mel"]["input"])
+    twPrediction = twModel.predict(dataset.testingDataset["mel"]["input"])
+    nbFrame = tPrediction.shape[1]
+    print(tPrediction.shape)
+
+    # mix the prediction giving the globals prediction
+    wgru_cls = [0, 2, 1]               # "impulse" event well detected by the WGRU
+    gru_cls   = [8, 3, 5, 7, 6, 9, 4]   # "stationary" event well detected by the GRU
+
+    finalTPrediction = []
+    #for i, gp in enumerate(gbPrediction):
+    #    cls = gp.nonzero()[0]
+    for i in range(len(tPrediction)):
+
+        curves = np.array([[0]*dataset.nbClass for _ in range(nbFrame)], dtype=np.float32)
+
+        # use the WGRU temporal
+        for c in wgru_cls:
+            print(curves.shape, twPrediction[i][:,c])
+            print(twPrediction[i][:,c])
+            curves[:,c] = twPrediction[i][:,c] # use the wgru temporal prediction
+            print(curves[:,c])
+
+        for c in gru_cls:
+            curves[:,c] = tPrediction[i][:,c]  # use the classic gru temporal prediction
+
+        finalTPrediction.append(curves)
+    finalTPrediction = np.array(finalTPrediction)
+    print(finalTPrediction.shape)
 
     encoder = Encoder()
-    segments = encoder.encode(tPrediction, method="threshold")#, smooth="smoothMovingAvg")
+    segments = encoder.encode(finalTPrediction, method="threshold")#, smooth="smoothMovingAvg")
     toEvaluate = encoder.parse(segments, dataset.testFileList)
 
     print("perform evaluation ...")
