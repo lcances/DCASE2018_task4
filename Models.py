@@ -354,3 +354,81 @@ def cnn_att(dataset: DCASE2018) -> Model:
     keras.utils.print_summary(model, line_length=100)
 
     return model
+
+def dense_crnn_mel64_tr2(dataset: DCASE2018) -> Model:
+    def convBlock(entry):
+        conv = BatchNormalization()(entry)
+        conv = Activation(activation="relu")(conv)
+        conv = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(conv)
+
+        return conv
+
+    def denseBlock(entry, size):
+        conv = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(entry)
+
+        links = [conv]
+        for i in range(size-1):
+            conv = convBlock(entry)
+            links.append(conv)
+            x = Concatenate(axis=-1)(links)
+
+        return x
+
+    denseBlockSize = 5
+    melInput = Input(dataset.getInputShape("mel"))
+
+    # ---- mel convolution part ----
+    conv = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(melInput)
+
+    # denseBlock 1
+    conv = denseBlock(conv, denseBlockSize)
+
+    conv = Conv2D(filters=64, kernel_size=(1, 1), padding="same")(conv)
+    conv = MaxPooling2D(pool_size=(4, 2))(conv)
+
+    # denseBlock 2
+    conv = denseBlock(conv, denseBlockSize)
+
+    conv = Conv2D(filters=64, kernel_size=(1, 1), padding="same")(conv)
+    conv = MaxPooling2D(pool_size=(4, 1))(conv)
+
+    # denseBlock 3
+    conv = denseBlock(conv, denseBlockSize)
+
+    conv = Conv2D(filters=64, kernel_size=(1, 1), padding="same")(conv)
+    conv = MaxPooling2D(pool_size=(4, 1))(conv)
+
+    print(conv)
+    targetShape = int(conv.shape[1] * conv.shape[2])
+    mReshape = Reshape(target_shape=(targetShape, 64))(conv)
+
+    gru = Bidirectional(
+        GRU(kernel_initializer='glorot_uniform', recurrent_dropout=0.0, dropout=0.3, units=64, return_sequences=True)
+    )(mReshape)
+
+    output = TimeDistributed(
+        Dense(100, activation="relu"),
+    )(gru)
+
+    output = TimeDistributed(
+        Dense(dataset.nbClass, activation="sigmoid"),
+    )(output)
+
+    output = GlobalAveragePooling1D()(output)
+
+    model = Model(inputs=[melInput], outputs=output)
+
+    return model
+
+if __name__=='__main__':
+    dataset = DCASE2018(
+        featureRoot="/baie/corpus/DCASE2018/task4/FEATURES",
+        metaRoot="/baie/corpus/DCASE2018/task4/metadata",
+        features=["mel"],
+        validationPercent=0.2,
+        normalizer=None
+    )
+
+    model = dense_crnn_mel64_tr2(dataset)
+    keras.utils.print_summary(model, line_length=100)
+
