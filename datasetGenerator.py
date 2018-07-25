@@ -243,21 +243,13 @@ class DCASE2018:
     def __createTestDataset(self, feature):
         self.testingDataset[feature]["input"] = []
 
-        for f in self.metadata["test"]:
-            f[0] = [self.featureRoot, "test", "feature", f[0]]
+        self.testFileList = os.listdir(os.path.join(self.feat_test, "mel"))
 
-        # load the features
-        for info in self.metadata["test"]:
-            pathList = info[0]
-            pathList[2] = feature
-            path = os.path.join(*pathList) + ".npy"
-            self.testFileList.append(path)
+        for file in self.testFileList:
+            path = os.path.join(self.feat_test, feature, file)
+            f = np.load(path)
 
-            if os.path.isfile(path):
-                feat = np.load(path)
-
-                self.testingDataset[feature]["input"].append(feat)
-
+            self.testingDataset[feature]["input"].append(f)
 
     def getInputShape(self, feature):
         shape = self.trainingDataset[feature]["input"][0].shape
@@ -277,3 +269,14 @@ class DCASE2018:
             output += "Validation ratio: %s" % self.validationPercent
 
         return output
+
+if __name__=='__main__':
+    dataset = DCASE2018(
+        featureRoot="/baie/corpus/DCASE2018/task4/FEATURES",
+        metaRoot="/baie/corpus/DCASE2018/task4/metadata",
+        features=["mel"],
+        validationPercent=0.2,
+        normalizer=None
+    )
+
+    print(dataset.testingDataset["mel"]["input"].shape)
