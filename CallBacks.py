@@ -2,15 +2,15 @@ from keras.callbacks import Callback
 from keras import backend as K
 from sklearn.metrics import precision_score, recall_score, f1_score
 
-import time
-import os
 from datasetGenerator import DCASE2018
 from Binarizer import Binarizer
 
+import signal, os, sys, time
 
 class CompleteLogger(Callback):
     def __init__(self, logPath: str, validation_data: tuple, history_size: int = 10,
-            fallback: bool = False, fallBackThreshold: int = 5, stopAt: int = 200,
+            fallback: bool = False, fallBackThreshold: int = 5, stopAt: int = 100,
+            display: bool = True
             ):
 
         super().__init__()
@@ -27,18 +27,24 @@ class CompleteLogger(Callback):
         self.logFile = {}
 
         self.currentEpoch = 0
+        self.stopAt = stopAt
         self.epochStart = 0
         self.epochDuration = 0
 
         self.history_size = history_size
         self.history = []       # a history of the best models
         self.sortedHistory = []
+        self.f1History = {"train": [], "val": []}
 
+        self.fallbackCooldown = self.history_size
         self.fallbackTh = fallBackThreshold
         self.nbFallback = 0
+        self.cooldown = 0
+        self.coolingDown = False
         self.nbMaxFallback = 3
 
         self.transferMode = False
+        self.display = display
         self.binarizer = Binarizer()
 
     def toggleTransfer(self):
@@ -86,13 +92,17 @@ class CompleteLogger(Callback):
         self.epochDuration = time.time() - self.epochStart
 
         self.__computeMetrics()
-        self.__toHistory()
+        self.__toHistory(logs)
 
         self.__printMetrics(logs, validation=True, overwrite=False)
         self.__logGeneralEpoch(logs)
         self.__logClassesEpoch()
 
         self.__fallingBack()
+
+        # stop training if stopAt is reached
+        if self.currentEpoch == self.stopAt:
+            self.model.stop_training = True
 
     # ==================================================================================================================
     #       Classes metrics compute
@@ -111,42 +121,84 @@ class CompleteLogger(Callback):
     # ==================================================================================================================
     #       HISTORY AND FALLBACK FUNCTION
     # ==================================================================================================================
-    def __toHistory(self):
-        average_f1 = self.f1.mean()
+    def __toHistory(self, logs=None):
+        average_f1 = float(logs[self.validationMetrics[-1]])
 
         # add the current model to the list of history
-        self.history.append( {"weights": self.model.get_weights(), "average f1": average_f1, "epoch": self.currentEpoch} )
-        self.sortedHistory.append( {"weights": self.model.get_weights(), "average f1": average_f1, "epoch": self.currentEpoch} )
+        self.history.append(
+                {"weights": self.model.get_weights(),
+                 "average f1": average_f1,
+                 "epoch": self.currentEpoch}
+                )
+        self.sortedHistory.append(
+                {"weights": self.model.get_weights(),
+                 "average f1": average_f1,
+                 "epoch": self.currentEpoch}
+                )
+        self.f1History["train"].append(float(logs[self.trainMetrics[-1]]))
+        self.f1History["val"].append(float(logs[self.validationMetrics[-1]]))
+
 
         # sort the list using the average f1 key
         self.sortedHistory = sorted(self.history, key=lambda k: k['average f1'])
 
         # keep only the <history_size> first
         self.history = self.history[:self.history_size]
-        self.sortedHistory = self.sortedHistory[:self.history_size]
+        self.sortedHistory = self.sortedHistory[-self.history_size:]
+        self.f1History["train"] = self.f1History["train"][:self.history_size]
+        self.f1History["val"] = self.f1History["val"][:self.history_size]
 
-    def __fallingBack(self) -> bool:
+    def __cutHistoryTo(self, toCut: int):
+        self.history = self.history[:toCut]
+        self.f1History["train"] = self.f1History["train"][:toCut]
+        self.f1History["val"] = self.f1History["val"][:toCut]
+
+    def __fallingBack(self):
+        # managing cooling down
+        if self.coolingDown:
+            self.cooldown += 1
+
+            if self.cooldown > self.fallbackCooldown:
+                self.cooldown = 0
+                self.coolingDown = False
+
+            print("cooling down")
+            return;
+
+        # if too much fallingback
         if self.nbFallback == self.nbMaxFallback:
             return;
 
+        # if not enough time spent
         if self.currentEpoch < self.history_size:
             return;
 
-        far = self.history[-1]
-        middle = self.history[int(self.history_size / 2)]
+        curF1Val = self.f1History["val"][-1]
+        curF1Tra = self.f1History["train"][-1]
+        diff = curF1Tra - curF1Val
 
-        farDiff = self.f1.mean() - far["average f1"]
-        middleDiff = self.f1.mean() - middle["average f1"]
+        if diff > self.fallbackTh:
 
-        if farDiff > self.fallbackTh and middleDiff > self.fallbackTh:
-            # smaller learning rate
-            currentLr = K.get_value(self.model.optimizer.lr)
-            K.set_value(self.model.optimizer.lr, currentLr * 0.75)
+            betterEpoch = self.history_size - 1
+            mini = diff
+            for i in range(self.history_size - 1, -1, -1):
+                cDiff = self.f1History["train"][i] - self.f1History["val"][i]
+                if cDiff < mini:
+                    mini = cDiff
+                    betterEpoch = i
 
-            # fallback to <far> epoch
-            self.model.set_weights(far["weights"])
+            print("Overfitting... going back in time %s epochs behind" % (betterEpoch))
+            print("train, val diff: %.2f" % mini)
+            self.model.set_weights(self.history[betterEpoch]["weights"])
+            self.nbFallback += 1
 
-            print("FALL BACK TO epoch %s" % (self.currentEpoch - self.history_size))
+            # pruning history
+            cutoff = self.currentEpoch - (self.history_size - betterEpoch)
+            self.__cutHistoryTo(cutoff)
+
+            # starting cooldown
+            self.coolingDown = True
+
 
     # ==================================================================================================================
     #       LOG FUNCTIONS
@@ -235,44 +287,59 @@ class CompleteLogger(Callback):
     #       DISPLAY FUNCTIONS
     # ==================================================================================================================
     def __printMetrics(self, logs: dict, validation: bool = False, overwrite: bool = True):
-        # two first column
-        print("{:<8}".format(self.currentEpoch), end="")
+        if self.display:
+            # two first column
+            print("{:<8}".format(self.currentEpoch), end="")
 
-        if "batch" in logs.keys():
-            percent = int(logs["batch"]) * int(self.params["batch_size"]) / int(self.params["samples"]) * 100
-            print("%{:<10}".format(str(int(percent))[:3]), end="")
-        else:
-            print("%{:<10}".format("100"), end="")
+            if "batch" in logs.keys():
+                percent = int(logs["batch"]) * int(self.params["batch_size"]) / int(self.params["samples"]) * 100
+                print("%{:<10}".format(str(int(percent))[:3]), end="")
+            else:
+                print("%{:<10}".format("100"), end="")
 
-        for m in self.trainMetrics:
-            print("{:<12}".format(str(logs[m])[:6]), end="")
-
-        if validation:
-            print(" | ", end="")
-            for m in self.validationMetrics:
+            for m in self.trainMetrics:
                 print("{:<12}".format(str(logs[m])[:6]), end="")
 
-        if overwrite:
-            print("", end="\r")
-        else:
-            print(" %.2f" % self.epochDuration, end="")
-            print("", end="\n")
+            if validation:
+                print(" | ", end="")
+                for m in self.validationMetrics:
+                    print("{:<12}".format(str(logs[m])[:6]), end="")
+
+            if overwrite:
+
+                print("", end="\r")
+            else:
+                print(" %.2f" % self.epochDuration, end="")
+                print("", end="\n")
 
     def __printHeader(self):
-        # Print the complete header
-        print("{:<8}".format("epoch"), end="")
-        print("{:<10}".format("progress"), end="")
+        if self.display:
+            # Print the complete header
+            print("{:<8}".format("epoch"), end="")
+            print("{:<10}".format("progress"), end="")
 
-        # print training metric name
-        for m in self.trainMetrics:
-            print("{:<12}".format(m[:10]), end="")
+            # print training metric name
+            for m in self.trainMetrics:
+                print("{:<12}".format(m[:10]), end="")
 
-        # print validation metric name
-        print(" | ", end="")
-        for m in self.validationMetrics:
-            print("{:<12}".format(m[:10]), end="")
+            # print validation metric name
+            print(" | ", end="")
+            for m in self.validationMetrics:
+                print("{:<12}".format(m[:10]), end="")
 
-        print("")
-        print("-" * (18 + 12 * len(self.trainMetrics) + 3 + 12 * len(self.validationMetrics)) )
+            print("")
+            print("-" * (18 + 12 * len(self.trainMetrics) + 3 + 12 * len(self.validationMetrics)) )
+
+    # ==================================================================================================================
+    #       EARLY KILL HANDLER
+    # ==================================================================================================================
+    def __exitAndSave(self, signum, frame):
+        print("SIGTERM OR SIGKILL SIGNAL RECEIVED...")
+        print("Saving the best model to early_stop_weights.h5")
+
+        model.set_weights(sortedHistory[-1]["weights"])
+        model.save_weights("early_stop_weights.h5py")
+
+        sys.exit(2)
 
 

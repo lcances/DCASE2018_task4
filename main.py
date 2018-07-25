@@ -125,15 +125,15 @@ if __name__ == '__main__':
     completeLogger = CallBacks.CompleteLogger(
         logPath=dirPath,
         validation_data=(dataset.validationDataset["mel"]["input"], dataset.validationDataset["mel"]["output"]),
-        fallback = True
+        fallback = True, fallBackThreshold = 3, stopAt = 100
     )
 
     callbacks = [completeLogger]
 
-    model = Models.crnn_mel64_tr2(dataset)
-
     # compile & fit model
     if not modelAlreadyTrained(dirPath) or args.retrain:
+        model = Models.crnn_mel64_tr2(dataset)
+
         model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
         model.fit(
             x=dataset.trainingDataset["mel"]["input"],
@@ -149,7 +149,10 @@ if __name__ == '__main__':
         )
 
         # save best model (callback history)
-        model.set_weights(completeLogger.sortedHistory[0]["weights"])
+        print("Best model:")
+        print("\t epoch: %s" % completeLogger.sortedHistory[-1]["epoch"])
+        print("\t mean f1: %s" % completeLogger.sortedHistory[-1]["average f1"])
+        model.set_weights(completeLogger.sortedHistory[-1]["weights"])
         Models.save(dirPath, model)
 
     else:
@@ -159,7 +162,7 @@ if __name__ == '__main__':
     # ==================================================================================================================
     #       Optimize thesholds using the validation dataset
     # ==================================================================================================================
-    print("Compute f1 score ...")
+    print("Compute f1 score on evaluation dataset")
     completeLogger.toggleTransfer()
     binarizer = Binarizer()
     encoder = Encoder()
@@ -167,14 +170,23 @@ if __name__ == '__main__':
     # save original model and keep track of the best one.
     # Optimize thresholds
     prediction = model.predict(dataset.validationDataset[feat[0]]["input"])
+    binPrediction = binarizer.binarize(prediction)
+    f10 = f1_score(dataset.validationDataset[feat[0]]["output"], binPrediction, average=None)
+
     binarizer.optimize(dataset.validationDataset["mel"]["output"], prediction)
     binPrediction = binarizer.binarize(prediction)
     f1 = f1_score(dataset.validationDataset[feat[0]]["output"], binPrediction, average=None)
 
     best = {
-        "original weight": model.get_weights(), "original f1": f1,
+        "original weight": model.get_weights(), "original f1": f10,
         "transfer weight": model.get_weights(), "transfer f1": f1,
     }
+
+    print("original f1", best["original f1"].mean())
+    print(best["original f1"])
+    print("")
+    print("optimized f1", best["transfer f1"].mean())
+    print(best["transfer f1"])
 
     # ==================================================================================================================
     #       Optimize thesholds using the validation dataset
@@ -253,7 +265,7 @@ if __name__ == '__main__':
     # ==================================================================================================================
     if args.uid:
         model2.summary()
-        tModel = Models.useWGRU(dirPath)
+        tModel = Models.useWGRU(dirPath+"_2")
 
     else:
         model.summary()

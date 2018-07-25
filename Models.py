@@ -2,7 +2,9 @@ from datasetGenerator import DCASE2018
 
 import keras.utils
 from keras.layers import Reshape, BatchNormalization, Activation, MaxPooling2D, Conv2D, Dropout, GRU, Dense, \
-        Input, Bidirectional, TimeDistributed, GlobalAveragePooling1D, Concatenate, GRUCell, SpatialDropout2D
+        Input, Bidirectional, TimeDistributed, GlobalAveragePooling1D, Concatenate, GRUCell, SpatialDropout2D, \
+        Flatten, Multiply
+
 from keras.models import Model, model_from_json
 from keras import backend as K
 from keras import regularizers
@@ -231,8 +233,6 @@ def save(dirPath: str, model: Model, transfer: bool = False):
         open(dirPath + "_transfer", "w").write("")
 
 def useWGRU(modelPath: str) -> Model:
-    K.clear_session()
-
     with open(modelPath + "_model.json") as modelJsonFile:
         model = model_from_json(modelJsonFile.read())
         print("model loaded")
@@ -248,6 +248,7 @@ def useWGRU(modelPath: str) -> Model:
 
         elif layers[i].name[:5] == "time_":
             timeName = layers[i].name
+            print("name ::::::: ", timeName)
             x = TimeDistributed( Dense(10, activation="sigmoid") )(x)
 
         else:
@@ -257,7 +258,7 @@ def useWGRU(modelPath: str) -> Model:
     newModel = Model(input=layers[0].input, output = x)
     newModel.load_weights(modelPath +"_weight.h5py")
 
-    return Model(input=newModel.input, output=newModel.get_layer(timeName).output)
+    return Model(input=newModel.input, output=newModel.get_layer("time_distributed_1").output)
 
 
 
@@ -304,3 +305,52 @@ def crnn_mel64_tr2(dataset: DCASE2018) -> Model:
 
     return model
 
+def cnn_att(dataset: DCASE2018) -> Model:
+    melInput = Input(dataset.getInputShape("mel"))
+
+    # ---- mel convolution part ----
+    conv = melInput
+    # first conv -> time reduction / 2
+    conv = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(conv)
+    conv = BatchNormalization()(conv)
+    conv = Activation(activation="relu")(conv)
+    conv = MaxPooling2D(pool_size=(2, 2))(conv)
+    conv = SpatialDropout2D(0.15, data_format="channels_last")(conv)
+
+    filters = [64, 64, 64, 64]
+    for fSize in filters:
+        conv = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(conv)
+        conv = BatchNormalization()(conv)
+        conv = Activation(activation="relu")(conv)
+        conv = MaxPooling2D(pool_size=(2, 1))(conv)
+        conv = SpatialDropout2D(0.15, data_format="channels_last")(conv)
+        #conv = Dropout(0.5)(conv)
+
+    # last conv -> normal + attention layer
+    link = conv
+
+    conv = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(conv)
+    conv = BatchNormalization()(conv)
+    conv = Activation(activation="relu")(conv)
+    conv = MaxPooling2D(pool_size=(2, 1))(conv)
+    conv = SpatialDropout2D(0.15, data_format="channels_last")(conv)
+
+    att = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(link)
+    att = BatchNormalization()(att)
+    att = Activation(activation="sigmoid")(att)
+    att = MaxPooling2D(pool_size=(2, 1))(att)
+    att = SpatialDropout2D(0.15, data_format="channels_last")(att)
+
+    mult = Multiply()([conv, att])
+
+    dense = Flatten()(mult)
+
+    dense = Dense(1500, activation="relu")(dense)
+    dense = Dense(796, activation="relu")(dense)
+    dense = Dense(256, activation="relu")(dense)
+    dense = Dense(10, activation="sigmoid")(dense)
+
+    model = Model(inputs=[melInput], outputs=dense)
+    keras.utils.print_summary(model, line_length=100)
+
+    return model
