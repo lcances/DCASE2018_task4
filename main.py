@@ -7,8 +7,10 @@ import random
 import numpy.random as npr
 import numpy as np
 from tensorflow import set_random_seed
-from keras.optimizers import Adam
 
+from keras.optimizers import Adam
+from keras.models import load_model, Model
+from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 
 import Models
 import Normalizer
@@ -114,7 +116,7 @@ if __name__ == '__main__':
     # ==================================================================================================================
     # hyperparameters
     epochs = 200
-    batch_size = 32
+    batch_size = 8
     metrics = ["accuracy", Metrics.f1]
     loss = "binary_crossentropy"
     optimizer = Adam(lr=0.0005)
@@ -125,13 +127,16 @@ if __name__ == '__main__':
         validation_data=(dataset.validationDataset["mel"]["input"], dataset.validationDataset["mel"]["output"]),
         fallback = True, fallBackThreshold = 3, stopAt = 100
     )
+    early_stopping = EarlyStopping(patience=10, verbose=1)
+    model_checkpoint = ModelCheckpoint("./keras.model", save_best_only=True)
+    reduce_lr = ReduceLROnPlateau(factor=0.15, patience=5, min_lr=0.000005)
 
-    callbacks = [completeLogger]
+    callbacks = [completeLogger, early_stopping, model_checkpoint, reduce_lr]
 
     # compile & fit model
     if not modelAlreadyTrained(dirPath) or args.retrain:
-        #model = Models.crnn_mel64_tr2(dataset)
-        model = Models.dense_crnn_mel64_tr2(dataset)
+        model = Models.crnn_mel64_tr2(dataset)
+        #model = Models.dense_crnn_mel64_tr2(dataset)
 
         model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
         model.fit(
@@ -152,6 +157,8 @@ if __name__ == '__main__':
         print("\t epoch: %s" % completeLogger.sortedHistory[-1]["epoch"])
         print("\t mean f1: %s" % completeLogger.sortedHistory[-1]["average f1"])
         model.set_weights(completeLogger.sortedHistory[-1]["weights"])
+        #model = load_model("./keras.model")
+
         Models.save(dirPath, model)
 
     else:
@@ -229,8 +236,8 @@ if __name__ == '__main__':
 
             callbacks.append(clrCallback)
 
-            model2 = Models.dense_crnn_mel64_tr2(dataset)
-            #model2 = Models.crnn_mel64_tr2(dataset)
+            #model2 = Models.dense_crnn_mel64_tr2(dataset)
+            model2 = Models.crnn_mel64_tr2(dataset)
 
             model2.compile(loss=loss, optimizer=optimizer, metrics=metrics)
             model2.fit(
@@ -247,6 +254,8 @@ if __name__ == '__main__':
             )
 
             # save the new model with the _2 extension
+            #model2 = load_model("./keras.model")
+            model2.set_weights(completeLogger.sortedHistory[-1]["weights"])
             Models.save(dirPath + "_2", model2)
 
         else:
@@ -299,10 +308,7 @@ if __name__ == '__main__':
 
         # use the WGRU temporal
         for c in wgru_cls:
-            print(curves.shape, twPrediction[i][:,c])
-            print(twPrediction[i][:,c])
             curves[:,c] = twPrediction[i][:,c] # use the wgru temporal prediction
-            print(curves[:,c])
 
         for c in gru_cls:
             curves[:,c] = tPrediction[i][:,c]  # use the classic gru temporal prediction
@@ -312,7 +318,7 @@ if __name__ == '__main__':
     print(finalTPrediction.shape)
 
     encoder = Encoder()
-    segments = encoder.encode(finalTPrediction, method="threshold")#, smooth="smoothMovingAvg")
+    segments = encoder.encode(finalTPrediction, method="threshold", smooth="smoothMovingAvg")
     toEvaluate = encoder.parse(segments, dataset.testFileList)
 
     print("perform evaluation ...")
