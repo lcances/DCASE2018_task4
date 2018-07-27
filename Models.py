@@ -261,7 +261,6 @@ def useWGRU(modelPath: str) -> Model:
     return Model(input=newModel.input, output=newModel.get_layer("time_distributed_1").output)
 
 
-
 def crnn_mel64_tr2(dataset: DCASE2018) -> Model:
     melInput = Input(dataset.getInputShape("mel"))
 
@@ -270,22 +269,22 @@ def crnn_mel64_tr2(dataset: DCASE2018) -> Model:
     mBlock1 = BatchNormalization()(mBlock1)
     mBlock1 = Activation(activation="relu")(mBlock1)
     mBlock1 = MaxPooling2D(pool_size=(4, 2))(mBlock1)
-    mBlock1 = SpatialDropout2D(0.15, data_format="channels_last")(mBlock1)
-    #mBlock1 = Dropout(0.5)(mBlock1)
+    #mBlock1 = SpatialDropout2D(0.15, data_format="channels_last")(mBlock1)
+    mBlock1 = Dropout(0.4)(mBlock1)
 
     mBlock2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(mBlock1)
     mBlock2 = BatchNormalization()(mBlock2)
     mBlock2 = Activation(activation="relu")(mBlock2)
     mBlock2 = MaxPooling2D(pool_size=(4, 1))(mBlock2)
-    mBlock2 = SpatialDropout2D(0.15, data_format="channels_last")(mBlock2)
-    #mBlock2 = Dropout(0.5)(mBlock2)
+    #mBlock2 = SpatialDropout2D(0.15, data_format="channels_last")(mBlock2)
+    mBlock2 = Dropout(0.4)(mBlock2)
 
     mBlock2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(mBlock2)
     mBlock2 = BatchNormalization()(mBlock2)
     mBlock2 = Activation(activation="relu")(mBlock2)
     mBlock2 = MaxPooling2D(pool_size=(4, 1))(mBlock2)
-    mBlock2 = SpatialDropout2D(0.15, data_format="channels_last")(mBlock2)
-    #mBlock2 = Dropout(0.5)(mBlock2)
+    #mBlock2 = SpatialDropout2D(0.15, data_format="channels_last")(mBlock2)
+    mBlock2 = Dropout(0.4)(mBlock2)
 
     targetShape = int(mBlock2.shape[1] * mBlock2.shape[2])
     mReshape = Reshape(target_shape=(targetShape, 64))(mBlock2)
