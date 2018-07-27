@@ -3,7 +3,7 @@ from datasetGenerator import DCASE2018
 import keras.utils
 from keras.layers import Reshape, BatchNormalization, Activation, MaxPooling2D, Conv2D, Dropout, GRU, Dense, \
         Input, Bidirectional, TimeDistributed, GlobalAveragePooling1D, Concatenate, GRUCell, SpatialDropout2D, \
-        Flatten, Multiply
+        Flatten, Multiply, GlobalAveragePooling2D, GlobalMaxPooling2D
 
 from keras.models import Model, model_from_json
 from keras import backend as K
@@ -355,80 +355,40 @@ def cnn_att(dataset: DCASE2018) -> Model:
 
     return model
 
-def dense_crnn_mel64_tr2(dataset: DCASE2018) -> Model:
-    def convBlock(entry):
-        conv = BatchNormalization()(entry)
-        conv = Activation(activation="relu")(conv)
-        conv = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(conv)
-
-        return conv
-
-    def denseBlock(entry, size):
-        conv = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(entry)
-
-        links = [conv]
-        for i in range(size-1):
-            conv = convBlock(entry)
-            links.append(conv)
-            x = Concatenate(axis=-1)(links)
-
-        return x
-
-    denseBlockSize = 5
+def full_cnn(dataset):
     melInput = Input(dataset.getInputShape("mel"))
 
     # ---- mel convolution part ----
-    conv = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(melInput)
+    mBlock1 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(melInput)
+    mBlock1 = BatchNormalization()(mBlock1)
+    mBlock1 = Activation(activation="relu")(mBlock1)
+    mBlock1 = MaxPooling2D(pool_size=(4, 2))(mBlock1)
+    mBlock1 = SpatialDropout2D(0.2, data_format=K.image_data_format())(mBlock1)
 
-    # denseBlock 1
-    conv = denseBlock(conv, denseBlockSize)
+    mBlock2 = Conv2D(filters=128, kernel_size=(3, 3), padding="same")(mBlock1)
+    mBlock2 = BatchNormalization()(mBlock2)
+    mBlock2 = Activation(activation="relu")(mBlock2)
+    mBlock2 = MaxPooling2D(pool_size=(4, 1))(mBlock2)
+    mBlock2 = SpatialDropout2D(0.2, data_format=K.image_data_format())(mBlock2)
 
-    conv = Conv2D(filters=64, kernel_size=(1, 1), padding="same")(conv)
-    conv = MaxPooling2D(pool_size=(4, 2))(conv)
+    mBlock3 = Conv2D(filters=256, kernel_size=(3, 3), padding="same")(mBlock2)
+    mBlock3 = BatchNormalization()(mBlock3)
+    mBlock3 = Activation(activation="relu")(mBlock3)
+    mBlock3 = MaxPooling2D(pool_size=(4, 1))(mBlock3)
+    mBlock3 = SpatialDropout2D(0.2, data_format=K.image_data_format())(mBlock3)
 
-    # denseBlock 2
-    conv = denseBlock(conv, denseBlockSize)
+    gap = GlobalAveragePooling2D()(mBlock3)
+    gmp = GlobalMaxPooling2D()(mBlock3)
+    # flat_gap = Flatten()(gap)
+    # flat_gmp = Flatten()(gmp)
 
-    conv = Conv2D(filters=64, kernel_size=(1, 1), padding="same")(conv)
-    conv = MaxPooling2D(pool_size=(4, 1))(conv)
+    concat = Concatenate()([gap, gmp])
 
-    # denseBlock 3
-    conv = denseBlock(conv, denseBlockSize)
+    d = Dense(1024, activation="relu")(concat)
+    d = Dropout(rate=0.5)(d)
 
-    conv = Conv2D(filters=64, kernel_size=(1, 1), padding="same")(conv)
-    conv = MaxPooling2D(pool_size=(4, 1))(conv)
+    output = Dense(dataset.nbClass, activation="sigmoid")(d)
 
-    print(conv)
-    targetShape = int(conv.shape[1] * conv.shape[2])
-    mReshape = Reshape(target_shape=(targetShape, 64))(conv)
-
-    gru = Bidirectional(
-        GRU(kernel_initializer='glorot_uniform', recurrent_dropout=0.0, dropout=0.3, units=64, return_sequences=True)
-    )(mReshape)
-
-    output = TimeDistributed(
-        Dense(100, activation="relu"),
-    )(gru)
-
-    output = TimeDistributed(
-        Dense(dataset.nbClass, activation="sigmoid"),
-    )(output)
-
-    output = GlobalAveragePooling1D()(output)
-
-    model = Model(inputs=[melInput], outputs=output)
-
-    return model
-
-if __name__=='__main__':
-    dataset = DCASE2018(
-        featureRoot="/baie/corpus/DCASE2018/task4/FEATURES",
-        metaRoot="/baie/corpus/DCASE2018/task4/metadata",
-        features=["mel"],
-        validationPercent=0.2,
-        normalizer=None
-    )
-
-    model = dense_crnn_mel64_tr2(dataset)
-    keras.utils.print_summary(model, line_length=100)
+    model1 = Model(inputs=[melInput], outputs=output)
+    model1.summary(line_length=100)
 
