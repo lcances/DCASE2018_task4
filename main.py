@@ -293,5 +293,5 @@ if __name__ == '__main__':
     print(event_based_metric)
 
     print("Saving final results in final_results.txt")
-    with open("final_results", "w") as f:
+    with open("final_results.txt", "w") as f:
         f.write(str(event_based_metric))
