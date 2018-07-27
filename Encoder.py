@@ -122,7 +122,6 @@ class Encoder:
         elif method == _methods[2]: encoder = self.__encodeUsingDerivative
         elif method == _methods[1]: encoder = self.__encodeUsingHysteresis
         elif method == _methods[3]: encoder = self.__encodeUsingPrimitive
-        elif method == _methods[4]: encoder = self.__encodeUsingDynThreshold
         else:
             sys.exit(1)
 
@@ -132,34 +131,6 @@ class Encoder:
         self.nbFrame = temporalPrediction.shape[1]
         self.frameLength = 10 / self.nbFrame
         return encoder(temporalPrediction, **kwargs)
-
-    def __encodeUsingDynThreshold(self, temporalPrediction: np.array, **kwargs) -> list:
-        """ Dynamic threshold based localization of the sound event in the clip using the temporal prediction.
-
-        func author: P. Guyot
-        ref: Xia, Xianjun & Togneri, Roberto & Sohel, Ferdous & Huang, Defeng. (2017).
-             Frame-Wise Dynamic Threshold Based Polyphonic Acoustic Event Detection. 10.21437/Interspeech.2017-746.
-
-        :param temporalPrediction: A 3-dimension numpy array (<nb clip>, <nb frqme>, <nb class>)
-        :param alpha: ?
-        :return: The result of the system under the form of an RLE list for each class
-        """
-        alpha = kwargs["alpha"] if "alpha" in kwargs.keys() else 0.2
-
-        threshold = []
-        curves = temporalPrediction.T
-
-        for frame in range(number_frame):
-            t = alpha * max(np.array(curves)[:,frame])
-            threshold.append(t)
-
-            binary_curves = []
-            for curve in new_curves:
-                binary_curve = [ 1 if value > t else 0 for value,t in zip(curve, threshold)]
-            binary_curves.append(binary_curve)
-
-        # Since we have now binarized curves, lets use an other function to encode them properly
-        return self.__encodeUsingHysteresis(binary_curves)
 
     def __encodeUsingHysteresis(self, temporalPrediction: np.array, **kwargs) -> list:
         """ Hysteresys based localization of the sound event in the clip using the temporal prediction.
