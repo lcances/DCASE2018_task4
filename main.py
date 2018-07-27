@@ -276,7 +276,7 @@ if __name__ == '__main__':
     if args.uid:
         model2.summary()
         gModel = model2
-        tModel = Model(input=model2.input, output=model2.get_layer("time_distributed_2").output)
+        tModel = Model(input=model2.input, output=model2.get_layer("time_distributed_1").output)
         twModel = Models.useWGRU(dirPath+"_2")
 
     else:
