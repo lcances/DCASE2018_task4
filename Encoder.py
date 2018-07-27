@@ -44,22 +44,29 @@ class Encoder:
             # retreiving extract arguments
             keys = kwargs.keys()
             window_len = kwargs["window_len"] if "window_len" in keys else 11
+            weight = kwargs["weight"] if "weight" in keys else 2
 
             window_len = int(window_len)
 
             if window_len < 3:
                 return data
 
-            s = np.r_[2 * data[0] - data[window_len - 1::-1], data, 2 * data[-1] - data[-1:-window_len:-1]]
+            s = np.r_[weight * data[0] - data[window_len - 1::-1], data, weight * data[-1] - data[-1:-window_len:-1]]
             w = np.ones(window_len, 'd')
             y = np.convolve(w / w.sum(), s, mode='same')
             return y[window_len:-window_len + 1]
 
+        outputs = []
         for clipInd in range(len(temporalPrediction)):
             clip = temporalPrediction[clipInd]
-
+            curves = []
             for clsInd in range(len(clip.T)):
-                clip.T[clsInd] = smooth(clip.T[clsInd])
+                #clip.T[clsInd] = smooth(clip.T[clsInd])
+                curves.append(smooth(clip.T[clsInd]))
+            curves = np.array(curves)
+            outputs.append(curves.T)
+        outputs = np.array(outputs)
+        return outputs
 
     def binToClass(self, prediction: np.array, binarize: bool = False) -> np.array:
         """ Given the prediction output of the network, match the results to the class name.
@@ -119,7 +126,7 @@ class Encoder:
             sys.exit(1)
 
         if smooth is not None:
-            self.__smooth(temporalPrediction, method=smooth, **kwargs)
+            temporalPrediction = self.__smooth(temporalPrediction, method=smooth, **kwargs)
 
         self.nbFrame = temporalPrediction.shape[1]
         self.frameLength = 10 / self.nbFrame
