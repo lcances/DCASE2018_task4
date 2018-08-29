@@ -438,6 +438,7 @@ class Encoder:
         for clipIndex in range(len(allSegments)):
             clip = allSegments[clipIndex]
 
+            nbSegment = 0
             for cls in clip:
                 start = 0
 
@@ -449,7 +450,11 @@ class Encoder:
                             (start + segment[1]) * self.frameLength,
                             DCASE2018.class_correspondance_reverse[cls]
                         )
+                        nbSegment += 1
                     start += segment[1]
+                
+            if nbSegment == 0:
+                output += "%s\n" % (os.path.basename(testFilesName[clipIndex])[:-4])
 
         return output
 
