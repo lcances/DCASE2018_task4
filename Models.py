@@ -2,12 +2,13 @@ from datasetGenerator import DCASE2018
 
 import keras.utils
 from keras.layers import Reshape, BatchNormalization, Activation, MaxPooling2D, Conv2D, Dropout, GRU, Dense, \
-        Input, Bidirectional, TimeDistributed, GlobalAveragePooling1D, Concatenate, GRUCell, SpatialDropout2D, \
-        Flatten, Multiply, GlobalAveragePooling2D, GlobalMaxPooling2D
+    Input, Bidirectional, TimeDistributed, GlobalAveragePooling1D, Concatenate, GRUCell, SpatialDropout2D, \
+    Flatten, Multiply, GlobalAveragePooling2D, GlobalMaxPooling2D
 
 from keras.models import Model, model_from_json
 from keras import backend as K
 from keras import regularizers
+
 
 class CustomGRUCell(GRUCell):
 
@@ -66,11 +67,6 @@ class CustomGRUCell(GRUCell):
                 x_r = K.bias_add(x_r, self.input_bias_r)
                 x_h = K.bias_add(x_h, self.input_bias_h)
 
-
-
-
-
-
             if 0. < self.recurrent_dropout < 1.:
                 h_tm1_z = h_tm1 * self.temporal_weight  # rec_dp_mask[0]
                 h_tm1_r = h_tm1 * self.temporal_weight  # rec_dp_mask[1]
@@ -79,11 +75,6 @@ class CustomGRUCell(GRUCell):
                 h_tm1_z = h_tm1 * self.temporal_weight
                 h_tm1_r = h_tm1 * self.temporal_weight
                 h_tm1_h = h_tm1 * self.temporal_weight
-
-
-
-
-
 
             recurrent_z = K.dot(h_tm1_z, self.recurrent_kernel_z)
             recurrent_r = K.dot(h_tm1_r, self.recurrent_kernel_r)
@@ -164,12 +155,13 @@ class CustomGRU(GRU):
                  stateful=False, unroll=False, reset_after=False, temporal_weight: float = 0.5, **kwargs):
         """
         super().__init__(units, activation=activation, recurrent_activation=recurrent_activation,
-                         use_bias=use_bias, kernel_initializer=kernel_initializer, recurrent_initializer=recurrent_initializer,
-                         bias_initializer=bias_initializer, kernel_regularizer=kernel_regularizer,
-                         recurrent_regularizer=recurrent_regularizer, bias_regularizer=bias_regularizer,
-                         activity_regularizer=activity_regularizer, kernel_constraint=kernel_constraint,
-                         recurrent_constraint=recurrent_constraint, bias_constraint=bias_constraint,
-                         dropout=dropout, recurrent_dropout=recurrent_dropout, implementation=implementation,
+                         use_bias=use_bias, kernel_initializer=kernel_initializer,
+                         recurrent_initializer=recurrent_initializer, bias_initializer=bias_initializer,
+                         kernel_regularizer=kernel_regularizer, recurrent_regularizer=recurrent_regularizer,
+                         bias_regularizer=bias_regularizer, activity_regularizer=activity_regularizer,
+                         kernel_constraint=kernel_constraint, recurrent_constraint=recurrent_constraint,
+                         bias_constraint=bias_constraint, dropout=dropout, recurrent_dropout=recurrent_dropout,
+                         implementation=implementation,
                          return_sequences=return_sequences, return_state=return_state, go_backwards=go_backwards,
                          stateful=stateful, unroll=unroll, reset_after=reset_after, **kwargs)
         """
@@ -213,27 +205,29 @@ class CustomGRU(GRU):
         return super().call(inputs, mask, True, initial_state)
 
 
-def load(dirPath: str) -> Model:
-    with open(dirPath + "_model.json", "r") as modelJsonFile:
-        model = model_from_json(modelJsonFile.read())
-    model.load_weights(dirPath + "_weight.h5py")
+def load(dir_path: str) -> Model:
+    with open(dir_path + "_model.json", "r") as model_json_file:
+        model = model_from_json(model_json_file.read())
+    model.load_weights(dir_path + "_weight.h5py")
 
     return model
 
-def save(dirPath: str, model: Model, transfer: bool = False):
+
+def save(dir_path: str, model: Model, transfer: bool = False):
     # save model ----------
     model_json = model.to_json()
-    with open(dirPath + "_model.json", "w") as f:
+    with open(dir_path + "_model.json", "w") as f:
         f.write(model_json)
 
     # save weight
-    model.save_weights(dirPath + "_weight.h5py")
+    model.save_weights(dir_path + "_weight.h5py")
 
     if transfer:
-        open(dirPath + "_transfer", "w").write("")
+        open(dir_path + "_transfer", "w").write("")
 
-def useWGRU(modelPath: str) -> Model:
-    with open(modelPath + "_model.json") as modelJsonFile:
+
+def use_wgru(model_path: str) -> Model:
+    with open(model_path + "_model.json") as modelJsonFile:
         model = model_from_json(modelJsonFile.read())
         print("model loaded")
 
@@ -243,55 +237,55 @@ def useWGRU(modelPath: str) -> Model:
     for i in range(1, len(layers)):
         if layers[i].name[:5] == "bidir":
             x = Bidirectional(
-                CustomGRU(units = 64, kernel_initializer='glorot_uniform', recurrent_dropout=0.8,
-                    dropout=0.0, return_sequences=True, temporal_weight=0.25), name="custom_bi")(x)
+                CustomGRU(units=64, kernel_initializer='glorot_uniform', recurrent_dropout=0.8,
+                          dropout=0.0, return_sequences=True, temporal_weight=0.25), name="custom_bi")(x)
 
         elif layers[i].name[:5] == "time_":
-            timeName = layers[i].name
-            print("name ::::::: ", timeName)
-            x = TimeDistributed( Dense(10, activation="sigmoid") )(x)
+            time_name = layers[i].name
+            print("name ::::::: ", time_name)
+            x = TimeDistributed(Dense(10, activation="sigmoid"))(x)
 
         else:
             x = layers[i](x)
         print(x)
 
-    newModel = Model(input=layers[0].input, output = x)
-    newModel.load_weights(modelPath +"_weight.h5py")
+    new_model = Model(input=layers[0].input, output=x)
+    new_model.load_weights(model_path + "_weight.h5py")
 
-    return Model(input=newModel.input, output=newModel.get_layer("time_distributed_1").output)
+    return Model(input=new_model.input, output=new_model.get_layer("time_distributed_1").output)
 
 
 def crnn_mel64_tr2(dataset: DCASE2018) -> Model:
-    melInput = Input(dataset.getInputShape("mel"))
+    mel_input = Input(dataset.getInputShape("mel"))
 
     # ---- mel convolution part ----
-    mBlock1 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(melInput)
-    mBlock1 = BatchNormalization()(mBlock1)
-    mBlock1 = Activation(activation="relu")(mBlock1)
-    mBlock1 = MaxPooling2D(pool_size=(4, 2))(mBlock1)
-    #mBlock1 = SpatialDropout2D(0.15, data_format="channels_last")(mBlock1)
-    mBlock1 = Dropout(0.4)(mBlock1)
+    m_block1 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(mel_input)
+    m_block1 = BatchNormalization()(m_block1)
+    m_block1 = Activation(activation="relu")(m_block1)
+    m_block1 = MaxPooling2D(pool_size=(4, 2))(m_block1)
+    # m_block1 = SpatialDropout2D(0.15, data_format="channels_last")(m_block1)
+    m_block1 = Dropout(0.4)(m_block1)
 
-    mBlock2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(mBlock1)
-    mBlock2 = BatchNormalization()(mBlock2)
-    mBlock2 = Activation(activation="relu")(mBlock2)
-    mBlock2 = MaxPooling2D(pool_size=(4, 1))(mBlock2)
-    #mBlock2 = SpatialDropout2D(0.15, data_format="channels_last")(mBlock2)
-    mBlock2 = Dropout(0.4)(mBlock2)
+    m_block2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(m_block1)
+    m_block2 = BatchNormalization()(m_block2)
+    m_block2 = Activation(activation="relu")(m_block2)
+    m_block2 = MaxPooling2D(pool_size=(4, 1))(m_block2)
+    # m_block2 = SpatialDropout2D(0.15, data_format="channels_last")(m_block2)
+    m_block2 = Dropout(0.4)(m_block2)
 
-    mBlock2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(mBlock2)
-    mBlock2 = BatchNormalization()(mBlock2)
-    mBlock2 = Activation(activation="relu")(mBlock2)
-    mBlock2 = MaxPooling2D(pool_size=(4, 1))(mBlock2)
-    #mBlock2 = SpatialDropout2D(0.15, data_format="channels_last")(mBlock2)
-    mBlock2 = Dropout(0.4)(mBlock2)
+    m_block2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(m_block2)
+    m_block2 = BatchNormalization()(m_block2)
+    m_block2 = Activation(activation="relu")(m_block2)
+    m_block2 = MaxPooling2D(pool_size=(4, 1))(m_block2)
+    # m_block2 = SpatialDropout2D(0.15, data_format="channels_last")(m_block2)
+    m_block2 = Dropout(0.4)(m_block2)
 
-    targetShape = int(mBlock2.shape[1] * mBlock2.shape[2])
-    mReshape = Reshape(target_shape=(targetShape, 64))(mBlock2)
+    target_shape = int(m_block2.shape[1] * m_block2.shape[2])
+    m_reshape = Reshape(target_shape=(target_shape, 64))(m_block2)
 
     gru = Bidirectional(
         GRU(kernel_initializer='glorot_uniform', recurrent_dropout=0.0, dropout=0.3, units=64, return_sequences=True)
-    )(mReshape)
+    )(m_reshape)
 
     output = TimeDistributed(
         Dense(dataset.nbClass, activation="sigmoid"),
@@ -299,16 +293,17 @@ def crnn_mel64_tr2(dataset: DCASE2018) -> Model:
 
     output = GlobalAveragePooling1D()(output)
 
-    model = Model(inputs=[melInput], outputs=output)
+    model = Model(inputs=[mel_input], outputs=output)
     keras.utils.print_summary(model, line_length=100)
 
     return model
 
+
 def cnn_att(dataset: DCASE2018) -> Model:
-    melInput = Input(dataset.getInputShape("mel"))
+    mel_input = Input(dataset.getInputShape("mel"))
 
     # ---- mel convolution part ----
-    conv = melInput
+    conv = mel_input
     # first conv -> time reduction / 2
     conv = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(conv)
     conv = BatchNormalization()(conv)
@@ -318,12 +313,12 @@ def cnn_att(dataset: DCASE2018) -> Model:
 
     filters = [64, 64, 64, 64]
     for fSize in filters:
-        conv = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(conv)
+        conv = Conv2D(filters=fSize, kernel_size=(3, 3), padding="same")(conv)
         conv = BatchNormalization()(conv)
         conv = Activation(activation="relu")(conv)
         conv = MaxPooling2D(pool_size=(2, 1))(conv)
         conv = SpatialDropout2D(0.15, data_format="channels_last")(conv)
-        #conv = Dropout(0.5)(conv)
+        # conv = Dropout(0.5)(conv)
 
     # last conv -> normal + attention layer
     link = conv
@@ -349,35 +344,36 @@ def cnn_att(dataset: DCASE2018) -> Model:
     dense = Dense(256, activation="relu")(dense)
     dense = Dense(10, activation="sigmoid")(dense)
 
-    model = Model(inputs=[melInput], outputs=dense)
+    model = Model(inputs=[mel_input], outputs=dense)
     keras.utils.print_summary(model, line_length=100)
 
     return model
+
 
 def full_cnn(dataset):
     melInput = Input(dataset.getInputShape("mel"))
 
     # ---- mel convolution part ----
-    mBlock1 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(melInput)
-    mBlock1 = BatchNormalization()(mBlock1)
-    mBlock1 = Activation(activation="relu")(mBlock1)
-    mBlock1 = MaxPooling2D(pool_size=(4, 2))(mBlock1)
-    mBlock1 = SpatialDropout2D(0.2, data_format=K.image_data_format())(mBlock1)
+    m_block1 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(melInput)
+    m_block1 = BatchNormalization()(m_block1)
+    m_block1 = Activation(activation="relu")(m_block1)
+    m_block1 = MaxPooling2D(pool_size=(4, 2))(m_block1)
+    m_block1 = SpatialDropout2D(0.2, data_format=K.image_data_format())(m_block1)
 
-    mBlock2 = Conv2D(filters=128, kernel_size=(3, 3), padding="same")(mBlock1)
-    mBlock2 = BatchNormalization()(mBlock2)
-    mBlock2 = Activation(activation="relu")(mBlock2)
-    mBlock2 = MaxPooling2D(pool_size=(4, 1))(mBlock2)
-    mBlock2 = SpatialDropout2D(0.2, data_format=K.image_data_format())(mBlock2)
+    m_block2 = Conv2D(filters=128, kernel_size=(3, 3), padding="same")(m_block1)
+    m_block2 = BatchNormalization()(m_block2)
+    m_block2 = Activation(activation="relu")(m_block2)
+    m_block2 = MaxPooling2D(pool_size=(4, 1))(m_block2)
+    m_block2 = SpatialDropout2D(0.2, data_format=K.image_data_format())(m_block2)
 
-    mBlock3 = Conv2D(filters=256, kernel_size=(3, 3), padding="same")(mBlock2)
-    mBlock3 = BatchNormalization()(mBlock3)
-    mBlock3 = Activation(activation="relu")(mBlock3)
-    mBlock3 = MaxPooling2D(pool_size=(4, 1))(mBlock3)
-    mBlock3 = SpatialDropout2D(0.2, data_format=K.image_data_format())(mBlock3)
+    m_block3 = Conv2D(filters=256, kernel_size=(3, 3), padding="same")(m_block2)
+    m_block3 = BatchNormalization()(m_block3)
+    m_block3 = Activation(activation="relu")(m_block3)
+    m_block3 = MaxPooling2D(pool_size=(4, 1))(m_block3)
+    m_block3 = SpatialDropout2D(0.2, data_format=K.image_data_format())(m_block3)
 
-    gap = GlobalAveragePooling2D()(mBlock3)
-    gmp = GlobalMaxPooling2D()(mBlock3)
+    gap = GlobalAveragePooling2D()(m_block3)
+    gmp = GlobalMaxPooling2D()(m_block3)
     # flat_gap = Flatten()(gap)
     # flat_gmp = Flatten()(gmp)
 
@@ -390,4 +386,3 @@ def full_cnn(dataset):
 
     model1 = Model(inputs=[melInput], outputs=output)
     model1.summary(line_length=100)
-

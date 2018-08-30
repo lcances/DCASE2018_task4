@@ -9,7 +9,7 @@ import numpy as np
 from tensorflow import set_random_seed
 
 from keras.optimizers import Adam
-from keras.models import load_model, Model
+from keras.models import Model
 from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 
 import Models
@@ -18,7 +18,6 @@ import Metrics
 from Binarizer import Binarizer
 from Encoder import Encoder
 import CallBacks
-from CLR.clr_callback import CyclicLR
 from datasetGenerator import DCASE2018
 
 # evaluate
@@ -53,7 +52,7 @@ if __name__ == '__main__':
     #       MANAGE PROGRAM ARGUMENTS
     # ==================================================================================================================
     parser = argparse.ArgumentParser()
-    parser.add_argument("--normalizer", help="normalizer [file_MinMax | global_MinMax | file_Mean | global_Mean | file_standard | global_standard | unit")
+    parser.add_argument("--normalizer", type=str, help="normalizer [file_MinMax | global_MinMax | file_Mean | global_Mean | file_standard | global_standard | unit")
     parser.add_argument("--output_model", help="basename for save file of the model")
     parser.add_argument("--meta_root", help="Path to the meta directory")
     parser.add_argument("--features_root", help="Path to the features directory")
@@ -70,7 +69,7 @@ if __name__ == '__main__':
         if args.normalizer == "global_MinMax": normalizer = Normalizer.MinMaxScaler(methods="global")
         if args.normalizer == "global_Mean": normalizer = Normalizer.MeanScaler(methods="global")
         if args.normalizer == "global_Standard": normalizer = Normalizer.StandardScaler(methods="global")
-        if args.normalizer == "unit": normalizer = Normalizer.UnitLength()
+        if args.normalizer == "unit": normalizer = Normalizer.UnitScaler()
 
     if not args.w:
         import warnings
@@ -103,10 +102,10 @@ if __name__ == '__main__':
     featRoot = args.features_root
     feat = ["mel"]
     dataset = DCASE2018(
-        featureRoot=featRoot,
-        metaRoot=metaRoot,
+        feature_root=featRoot,
+        meta_root=metaRoot,
         features=feat,
-        validationPercent=0.2,
+        validation_percent=0.2,
         normalizer=normalizer
     )
 
@@ -124,7 +123,7 @@ if __name__ == '__main__':
 
     completeLogger = CallBacks.CompleteLogger(
         logPath=dirPath,
-        validation_data=(dataset.validationDataset["mel"]["input"], dataset.validationDataset["mel"]["output"]),
+        validation_data=(dataset.validation_dataset["mel"]["input"], dataset.validation_dataset["mel"]["output"]),
         fallback = True, fallBackThreshold = 3, stopAt = 100
     )
     early_stopping = EarlyStopping(patience=10, verbose=1)
@@ -140,13 +139,13 @@ if __name__ == '__main__':
 
         model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
         model.fit(
-            x=dataset.trainingDataset["mel"]["input"],
-            y=dataset.trainingDataset["mel"]["output"],
+            x=dataset.training_dataset["mel"]["input"],
+            y=dataset.training_dataset["mel"]["output"],
             epochs=epochs,
             batch_size=batch_size,
             validation_data=(
-                dataset.validationDataset["mel"]["input"],
-                dataset.validationDataset["mel"]["output"]
+                dataset.validation_dataset["mel"]["input"],
+                dataset.validation_dataset["mel"]["output"]
             ),
             callbacks=callbacks,
             verbose=0
@@ -175,13 +174,13 @@ if __name__ == '__main__':
 
     # save original model and keep track of the best one.
     # Optimize thresholds
-    prediction = model.predict(dataset.validationDataset[feat[0]]["input"])
+    prediction = model.predict(dataset.validation_dataset[feat[0]]["input"])
     binPrediction = binarizer.binarize(prediction)
-    f10 = f1_score(dataset.validationDataset[feat[0]]["output"], binPrediction, average=None)
+    f10 = f1_score(dataset.validation_dataset[feat[0]]["output"], binPrediction, average=None)
 
-    binarizer.optimize(dataset.validationDataset["mel"]["output"], prediction)
+    binarizer.optimize(dataset.validation_dataset["mel"]["output"], prediction)
     binPrediction = binarizer.binarize(prediction)
-    f1 = f1_score(dataset.validationDataset[feat[0]]["output"], binPrediction, average=None)
+    f1 = f1_score(dataset.validation_dataset[feat[0]]["output"], binPrediction, average=None)
 
     best = {
         "original weight": model.get_weights(), "original f1": f10,
@@ -201,7 +200,7 @@ if __name__ == '__main__':
         if not transferAlreadyDone(dirPath) or args.retrain:
             # load the unlabel_in_domain features
             print("Loading the unlabel in domain dataset ...")
-            uid_features = dataset.loadUID()
+            uid_features = dataset.load_uid()
 
             # Predict the complete unlabel_in_domain dataset and use it to expand the training dataset
             print("Predicting the unlabel in domain dataset ...")
@@ -210,37 +209,34 @@ if __name__ == '__main__':
             binPrediction = binarizer.binarize(prediction)
 
             print("Expand training dataset and re-training ...")
-            dataset.expandWithUID(uid_features, binPrediction)
+            dataset.expand_with_uid(uid_features, binPrediction)
 
             # use both weak dataset and unlabel in domain dataset as training dataset
             forTraining = {
                 "input": np.concatenate(
-                    (dataset.trainingDataset["mel"]["input"], dataset.trainingUidDataset["mel"]["input"])),
+                    (dataset.training_dataset["mel"]["input"], dataset.training_uid_dataset["mel"]["input"])),
                 "output": np.concatenate(
-                    (dataset.trainingDataset["mel"]["output"], dataset.trainingUidDataset["mel"]["output"]))
+                    (dataset.training_dataset["mel"]["output"], dataset.training_uid_dataset["mel"]["output"]))
             }
 
             # use the whole weak dataset as validation dataset
             forValidation = {
                 "input": np.concatenate(
-                    (dataset.trainingDataset["mel"]["input"], dataset.validationDataset["mel"]["input"])),
+                    (dataset.training_dataset["mel"]["input"], dataset.validation_dataset["mel"]["input"])),
                 "output": np.concatenate(
-                    (dataset.trainingDataset["mel"]["output"], dataset.validationDataset["mel"]["output"])),
+                    (dataset.training_dataset["mel"]["output"], dataset.validation_dataset["mel"]["output"])),
             }
 
             # ==================================================================================================================
             #   Train new model with extended dataset (reset the weight)
             # ==================================================================================================================
             trainingIterationPerEpoch = len(forTraining["input"]) / batch_size
-            clrCallback = CyclicLR(base_lr = 0.0005, max_lr = 0.003, step_size = trainingIterationPerEpoch, mode='triangular2')
 
-            callbacks.append(clrCallback)
+            #m odel2 = Models.dense_crnn_mel64_tr2(dataset)
+            model_2 = Models.crnn_mel64_tr2(dataset)
 
-            #model2 = Models.dense_crnn_mel64_tr2(dataset)
-            model2 = Models.crnn_mel64_tr2(dataset)
-
-            model2.compile(loss=loss, optimizer=optimizer, metrics=metrics)
-            model2.fit(
+            model_2.compile(loss=loss, optimizer=optimizer, metrics=metrics)
+            model_2.fit(
                 x=forTraining["input"],
                 y=forTraining["output"],
                 epochs=100,
@@ -255,18 +251,18 @@ if __name__ == '__main__':
 
             # save the new model with the _2 extension
             #model2 = load_model("./keras.model")
-            model2.set_weights(completeLogger.sortedHistory[-1]["weights"])
-            Models.save(dirPath + "_2", model2)
+            model_2.set_weights(completeLogger.sortedHistory[-1]["weights"])
+            Models.save(dirPath + "_2", model_2)
 
         else:
             print("Transfer already done, loading saved model ...")
-            model2 = Models.load(dirPath + "_2")
+            model_2 = Models.load(dirPath + "_2")
 
         # compute f1 score and same (for later comparison)
         print("Compute the final f1 score ...")
-        prediction = model2.predict(dataset.validationDataset[feat[0]]["input"])
+        prediction = model_2.predict(dataset.validation_dataset[feat[0]]["input"])
         binPrediction = binarizer.binarize(prediction)
-        f1 = f1_score(dataset.validationDataset[feat[0]]["output"], binPrediction, average=None)
+        f1 = f1_score(dataset.validation_dataset[feat[0]]["output"], binPrediction, average=None)
         best["transfer weight"] = model.get_weights()
         best["transfer f1"] = f1
 
@@ -274,52 +270,50 @@ if __name__ == '__main__':
     #   STRONG ANNOTATION stage and evaluation
     # ==================================================================================================================
     if args.uid:
-        model2.summary()
-        gModel = model2
-        tModel = Model(input=model2.input, output=model2.get_layer("time_distributed_1").output)
-        twModel = Models.useWGRU(dirPath+"_2")
+        model_2.summary()
+        g_model = model_2
+        t_model = Model(input=model_2.input, output=model_2.get_layer("time_distributed_1").output)
+        tw_model = Models.use_wgru(dirPath + "_2")
 
     else:
         model.summary()
-        gModel = model
-        tModel = Model(input=model.input, output=model.get_layer("time_distributed_1").output)
-        twModel = Models.useWGRU(dirPath)
+        g_model = model
+        t_model = Model(input=model.input, output=model.get_layer("time_distributed_1").output)
+        tw_model = Models.use_wgru(dirPath)
 
     # global prediction
-    #gPrediction = gModel.predict(dataset.testingDataset["mel"]["input"])
-    #gbPrediction = binarizer.binarize(gPrediction)
+    # gPrediction = gModel.predict(dataset.testingDataset["mel"]["input"])
+    # gbPrediction = binarizer.binarize(gPrediction)
 
     # temporal prediction using both WGRU and GRU
-    tPrediction = tModel.predict(dataset.testingDataset["mel"]["input"])
-    twPrediction = twModel.predict(dataset.testingDataset["mel"]["input"])
-    nbFrame = tPrediction.shape[1]
-    print(tPrediction.shape)
+    t_prediction = t_model.predict(dataset.testing_dataset["mel"]["input"])
+    tw_prediction = tw_model.predict(dataset.testing_dataset["mel"]["input"])
+    nb_frame = t_prediction.shape[1]
+    print(t_prediction.shape)
 
     # mix the prediction giving the globals prediction
     wgru_cls = [0, 2, 1]               # "impulse" event well detected by the WGRU
-    gru_cls   = [8, 3, 5, 7, 6, 9, 4]   # "stationary" event well detected by the GRU
+    gru_cls = [8, 3, 5, 7, 6, 9, 4]   # "stationary" event well detected by the GRU
 
-    finalTPrediction = []
-    #for i, gp in enumerate(gbPrediction):
-    #    cls = gp.nonzero()[0]
-    for i in range(len(tPrediction)):
+    final_t_prediction = []
+    for i in range(len(t_prediction)):
 
-        curves = np.array([[0]*dataset.nbClass for _ in range(nbFrame)], dtype=np.float32)
+        curves = np.array([[0] * dataset.nbClass for _ in range(nb_frame)], dtype=np.float32)
 
         # use the WGRU temporal
         for c in wgru_cls:
-            curves[:,c] = twPrediction[i][:,c] # use the wgru temporal prediction
+            curves[:,c] = tw_prediction[i][:, c] # use the wgru temporal prediction
 
         for c in gru_cls:
-            curves[:,c] = tPrediction[i][:,c]  # use the classic gru temporal prediction
+            curves[:,c] = t_prediction[i][:, c]  # use the classic gru temporal prediction
 
-        finalTPrediction.append(curves)
-    finalTPrediction = np.array(finalTPrediction)
-    print(finalTPrediction.shape)
+        final_t_prediction.append(curves)
+    final_t_prediction = np.array(final_t_prediction)
+    print(final_t_prediction.shape)
 
     encoder = Encoder()
-    segments = encoder.encode(finalTPrediction, method="threshold", smooth="smoothMovingAvg")
-    toEvaluate = encoder.parse(segments, dataset.testFileList)
+    segments = encoder.encode(final_t_prediction, method="threshold", smooth="smoothMovingAvg")
+    toEvaluate = encoder.parse(segments, dataset.test_file_list)
 
     print("perform evaluation ...")
     with open("toEvaluate.csv", "w") as f:

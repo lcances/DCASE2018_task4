@@ -1,11 +1,10 @@
 from keras.callbacks import Callback
-from keras import backend as K
 from sklearn.metrics import precision_score, recall_score, f1_score
 
 from datasetGenerator import DCASE2018
 from Binarizer import Binarizer
 
-import signal, os, sys, time
+import os, sys, time
 
 class CompleteLogger(Callback):
     def __init__(self, logPath: str, validation_data: tuple, history_size: int = 10,
@@ -163,15 +162,15 @@ class CompleteLogger(Callback):
                 self.coolingDown = False
 
             print("cooling down")
-            return;
+            return
 
         # if too much fallingback
         if self.nbFallback == self.nbMaxFallback:
-            return;
+            return
 
         # if not enough time spent
         if self.currentEpoch < self.history_size:
-            return;
+            return
 
         curF1Val = self.f1History["val"][-1]
         curF1Tra = self.f1History["train"][-1]
@@ -337,8 +336,8 @@ class CompleteLogger(Callback):
         print("SIGTERM OR SIGKILL SIGNAL RECEIVED...")
         print("Saving the best model to early_stop_weights.h5")
 
-        model.set_weights(sortedHistory[-1]["weights"])
-        model.save_weights("early_stop_weights.h5py")
+        self.model.set_weights(self.sortedHistory[-1]["weights"])
+        self.model.save_weights("early_stop_weights.h5py")
 
         sys.exit(2)
 

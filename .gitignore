@@ -15,3 +15,4 @@ results/baseline_categorical/
 results/baseline/
 __pycache__/
 **.ipynd
+**.pyc

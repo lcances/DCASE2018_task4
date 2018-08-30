@@ -10,13 +10,13 @@ from datasetGenerator import DCASE2018
 import numpy as np
 import copy
 import sys
-import random
 from sklearn.metrics import recall_score, precision_score, f1_score, roc_curve
 
 
 class Binarizer(object):
     _instance = None
     _exist = False
+
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
             cls._instance = super(Binarizer, cls).__new__(cls, *args, **kwargs)
@@ -27,18 +27,17 @@ class Binarizer(object):
             self.thresholds = dict()
             self.optimized = False
 
-            self.__initThresholds()
+            self.__init_thresholds()
             Binarizer._exist = True
 
-    def __initThresholds(self):
+    def __init_thresholds(self):
         """
         For each class, set the threshold to 0.5
         """
         for key in DCASE2018.class_correspondance:
             self.thresholds[key] = 0.5
 
-
-    def optimize(self, y_true: np.array, predictionResult: np.array, method: str = "simulated_annealing"):
+    def optimize(self, y_true: np.array, prediction_result: np.array, method: str = "simulated_annealing"):
         """ Find the best thresholds for each classes with different methods available.
 
         methods available are
@@ -46,27 +45,30 @@ class Binarizer(object):
             - "auc" -> use the Aera Under the Curve methods to set the optimized thresholds
 
         :param y_true: ground truth
-        :param predictionResult: 2-dimension numpy array not binarized
+        :param prediction_result: 2-dimension numpy array not binarized
         :param method: methods to use for the threshold optimization: "metrics" | "auc"
         """
         _method = ["metrics", "auc", "simulated_annealing"]
-        if method == _method[0]: optimizer = self.__metricsOptimization
-        elif method == _method[1]: optimizer = self.__aucOptimization
-        elif method == _method[2]: optimizer = self.__simulatedAnnealingOptimization
+        if method == _method[0]:
+            optimizer = self.__metrics_optimization
+        elif method == _method[1]:
+            optimizer = self.__aucOptimization
+        elif method == _method[2]:
+            optimizer = self.__simulated_annealing_optimization
         else:
             # TODO change sys.exit by raise
             print("Can't binarize on a array of dimension different that 2 or 3")
             sys.exit(1)
 
-        if self.optimized == True:
+        if self.optimized:
             print("Binarizer was already optimized. Reseting the thresholds and perform new optimization")
             self.resetOptimization()
 
-        optimizer(y_true, predictionResult)
+        optimizer(y_true, prediction_result)
         self.optimized = True
 
-    def __simulatedAnnealingOptimization(self, y_true, predictionResult: np.array):
-        def applyThreshold(thresh: list, prediction: np.array) -> list:
+    def __simulated_annealing_optimization(self, y_true, prediction_result: np.array):
+        def apply_threshold(thresh: list, prediction: np.array) -> list:
             pred = copy.copy(prediction)
 
             for clsInd in range(len(pred.T)):
@@ -75,13 +77,13 @@ class Binarizer(object):
 
             return pred
 
-        def initThresholds():
+        def init_thresholds():
             return np.array([random.randint(40, 60) / 100 for _ in range(10)])
 
         def gaussian(x, mu, sig):
             return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
 
-        def calcDelta(thresholds, weight):
+        def calc_delta(thresholds, weight):
             output = []
             for th in thresholds:
                 g = gaussian(th, 0.5, 0.08)
@@ -90,25 +92,25 @@ class Binarizer(object):
 
         # initialization
         thresholds = [0.5 for _ in range(10)]
-        pred0 = applyThreshold(thresholds, predictionResult)
+        pred0 = apply_threshold(thresholds, prediction_result)
         f10 = f1_score(pred0, y_true, average=None)
 
         best = {"thresholds": thresholds, "mean f1": f10.mean(), "f1": f10}
 
-        metaIter = 100
-        nbIter = 30
+        meta_iter = 100
+        nb_iter = 30
 
-        for j in range(metaIter):
-            thresholds = initThresholds()
+        for j in range(meta_iter):
+            thresholds = init_thresholds()
             weight = 0.07
-            decay = weight / (nbIter * 1.9)
+            decay = weight / (nb_iter * 1.9)
 
-            for i in range(nbIter):
-                delta = calcDelta(thresholds, weight)
+            for i in range(nb_iter):
+                delta = calc_delta(thresholds, weight)
                 thresholds += delta
                 weight -= decay
 
-                nPred = applyThreshold(thresholds, predictionResult)
+                nPred = apply_threshold(thresholds, prediction_result)
                 f1 = f1_score(nPred, y_true, average=None)
 
                 if f1.mean() > best["mean f1"]:
@@ -121,58 +123,57 @@ class Binarizer(object):
             self.thresholds[key] = best["thresholds"][cpt]
             cpt += 1
 
-    def __metricsOptimization(self, y_true: np.array , predictionResult: np.array):
-        binPrediction = self.binarize(predictionResult)
+    def __metrics_optimization(self, y_true: np.array, prediction_result: np.array):
+        bin_prediction = self.binarize(prediction_result)
 
-        f1 = f1_score(y_true, binPrediction, average=None)
-        recall = recall_score(y_true, binPrediction, average=None)
-        precision = precision_score(y_true, binPrediction, average=None)
+        f1 = f1_score(y_true, bin_prediction, average=None)
+        recall = recall_score(y_true, bin_prediction, average=None)
+        precision = precision_score(y_true, bin_prediction, average=None)
 
         for cls in DCASE2018.class_correspondance:
             index = DCASE2018.class_correspondance[cls]
 
             self.thresholds[cls] = (f1[index] + recall[index] + precision[index]) / 3
 
-    def __aucOptimization(self, y_true: np.array, predictionResult: np.array):
+    def __aucOptimization(self, y_true: np.array, prediction_result: np.array):
         fpr = dict()
         tpr = dict()
 
-        bestThresholds = [0] * DCASE2018.NB_CLASS
         for cls in DCASE2018.class_correspondance:
             y_true = np.array(y_true[:, cls])
-            y_pred = np.array(predictionResult[:, cls])
+            y_pred = np.array(prediction_result[:, cls])
 
             fpr[cls], tpr[cls], thresholds = roc_curve(y_true, y_pred, pos_label=1, drop_intermediate=False)
 
-            bestThInd = np.argmax(tpr[cls] - fpr[cls])
-            self.thresholds[cls] = thresholds[bestThInd]
+            best_th_ind = np.argmax(tpr[cls] - fpr[cls])
+            self.thresholds[cls] = thresholds[best_th_ind]
 
     def resetOptimization(self):
         """
         Cancel the optimization results and reset the thresholds to 0.5
         """
-        self.__initThresholds()
+        self.__init_thresholds()
         self.optimized = False
 
-    def binarize(self, predictionResult: np.array) -> np.array:
+    def binarize(self, prediction_result: np.array) -> np.array:
         """
         Binarize the prediction results given using the defines thresholds, Can work with global prediction and
         temporal prediction
-        :param predictionResult: 2 or 3 dimensions numpy array not binarized
+        :param prediction_result: 2 or 3 dimensions numpy array not binarized
         :return: 2 or 3 dimension numpy array representing the binarized prediction
         """
-        if len(predictionResult.shape) == 2: return self.__globalBinarization(predictionResult)
-        elif len(predictionResult.shape) == 3: return self.__temporalBinarization(predictionResult)
+        if len(prediction_result.shape) == 2: return self.__global_binarization(prediction_result)
+        elif len(prediction_result.shape) == 3: return self.__temporal_binarization(prediction_result)
         else:
             # TODO change sys.exit by raise
             print("Can't binarize on a array of dimension different that 2 or 3")
             sys.exit(1)
 
-    def __globalBinarization(self, predictionResult: np.array) -> np.array:
+    def __global_binarization(self, prediction_result: np.array) -> np.array:
         output = []
         mappedScore = np.nan_to_num([self.thresholds[key] for key in self.thresholds])
-        for i in range(len(predictionResult)):
-            line = copy.copy(predictionResult[i])
+        for i in range(len(prediction_result)):
+            line = copy.copy(prediction_result[i])
 
             line[line > mappedScore] = 1
             line[line <= mappedScore] = 0
@@ -180,28 +181,30 @@ class Binarizer(object):
 
         return np.array(output)
 
-    def __temporalBinarization(self, temporalPrediction: np.array) -> np.array:
+    def __temporal_binarization(self, temporal_prediction: np.array) -> np.array:
         output = []
-        mappedScore = np.nan_to_num([self.thresholds[key] for key in self.thresholds])
+        mapped_score = np.nan_to_num([self.thresholds[key] for key in self.thresholds])
 
-        for clip in temporalPrediction:
+        for clip in temporal_prediction:
             bin = []
 
             for i in range(len(clip)):
                 line = copy.copy(clip[i])
 
-                line[line > mappedScore] = 1
-                line[line <= mappedScore] = 0
+                line[line > mapped_score] = 1
+                line[line <= mapped_score] = 0
                 bin.append(line)
 
             output.append(bin)
 
         return np.array(output)
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     import random
+
     # create fake data (global prediction)
-    def fakeGlobalPrediction():
+    def fake_global_prediction():
         prediction = []
         for i in range(1000):
             score = [random.random() for i in range(10)]
@@ -212,12 +215,12 @@ if __name__=="__main__":
         print(prediction)
 
         b = Binarizer()
-        binPrediction = b.binarize(prediction)
-        print(binPrediction)
-        print(binPrediction.shape)
+        bin_prediction = b.binarize(prediction)
+        print(bin_prediction)
+        print(bin_prediction.shape)
 
     # create fake data (temporal prediction)
-    def fakeTemporalPrediction():
+    def fake_temporal_prediction():
         prediction = []
         for i in range(1000):
             clip = []
@@ -231,10 +234,9 @@ if __name__=="__main__":
         print(prediction.shape)
 
         b = Binarizer()
-        binPrediction = b.binarize(prediction)
-        print(binPrediction)
-        print(binPrediction.shape)
+        bin_prediction = b.binarize(prediction)
+        print(bin_prediction)
+        print(bin_prediction.shape)
 
-    fakeTemporalPrediction()
-
+    fake_temporal_prediction()
 

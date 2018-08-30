@@ -1,13 +1,16 @@
 import numpy as np
 from librosa import power_to_db
 
-class WrongShapeExeception(Exception):
+
+class WrongShapeException(Exception):
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)
+
 
 class NotFitYet(Exception):
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)
+
 
 class MethodsDoesNotExist(Exception):
     def __init__(self, *args: object, **kwargs: object) -> None:
@@ -24,16 +27,14 @@ class Scaler:
     def transform(self, m: np.array) -> np.array:
         raise NotImplementedError
 
-    def __2DTransform(self, m: np.array) -> np.array:
+    def __2d_transform(self, m: np.array) -> np.array:
         raise NotImplementedError
 
-    def __3DTransform(self, m: np.array) -> np.array:
+    def __3d_transform(self, m: np.array) -> np.array:
         raise NotImplementedError
 
     def fit_transform(self, m: np.array) -> np.array:
         raise NotImplementedError
-
-
 
 
 class MinMaxScaler(Scaler):
@@ -56,8 +57,10 @@ class MinMaxScaler(Scaler):
                 raise MethodsDoesNotExist("Only available methods: \"global\" or \"local\"")
 
     def transform(self, m: np.array) -> np.array:
-        if self.methods == "global": return self.__3DTransform(m)
-        elif self.methods == "local": return self.__2DTransform(m)
+        if self.methods == "global":
+            return self.__3d_transform(m)
+        elif self.methods == "local":
+            return self.__2d_transform(m)
         else:
             raise MethodsDoesNotExist("Only available methods: \"global\" or \"local\"")
 
@@ -65,29 +68,27 @@ class MinMaxScaler(Scaler):
         self.fit(m)
         return self.transform(m)
 
-    def __3DTransform(self, m: np.array):
+    def __3d_transform(self, m: np.array):
         if self.mini == [] or self.maxi == []:
             raise NotFitYet("Data haven't been fit yet, can't perform scaling")
 
         if len(m.shape) != 3:
-            raise WrongShapeExeception("Matrix should be of dimension 3")
+            raise WrongShapeException("Matrix should be of dimension 3")
 
         results = []
 
         for d in m:
-            results.append( (d - self.mini) / (self.maxi - self.mini))
+            results.append((d - self.mini) / (self.maxi - self.mini))
 
         return np.array(results)
 
-    def __2DTransform(self, m: np.array):
+    def __2d_transform(self, m: np.array):
         results = []
 
         for d in m:
-            results.append( (d - d.min(axis = 0)) / (d.max(axis = 0) - d.min(axis = 0)) )
+            results.append((d - d.min(axis=0)) / (d.max(axis=0) - d.min(axis=0)))
 
         return np.array(results)
-
-
 
 
 class MeanScaler(Scaler):
@@ -107,22 +108,25 @@ class MeanScaler(Scaler):
                 raise MethodsDoesNotExist("Only available methods: \"global\" or \"local\"")
 
     def transform(self, m: np.array) -> np.array:
-        if self.methods == "global": return self.__3DTransform(m)
-        elif self.methods == "local": return self.__2DTransform(m)
+        if self.methods == "global":
+            return self.__3d_transform(m)
+
+        elif self.methods == "local":
+            return self.__2d_transform(m)
+
         else:
             raise MethodsDoesNotExist("Only available methods: \"global\" or \"local\"")
-
 
     def fit_transform(self, m: np.array) -> np.array:
         self.fit(m)
         return self.transform(m)
 
-    def __3DTransform(self, m: np.array):
-        if self.mean == []:
+    def __3d_transform(self, m: np.array):
+        if not self.mean:
             raise NotFitYet("Data haven't been fit yet, can't perform scaling")
 
         if len(m.shape) != 3:
-            raise WrongShapeExeception("Matrix should be of dimension 3")
+            raise WrongShapeException("Matrix should be of dimension 3")
 
         results = []
 
@@ -131,15 +135,16 @@ class MeanScaler(Scaler):
 
         return np.array(results)
 
-    def __2DTransform(self, m: np.array):
+    def __2d_transform(self, m: np.array):
         results = []
 
         for d in m:
-            results.append(d - d.mean(axis = 0))
+            results.append(d - d.mean(axis=0))
 
         return np.array(results)
 
-def File_MeanNormalization(data: np.array) -> np.array:
+
+def file_mean_normalization(data: np.array) -> np.array:
     """
     Perform a Mean normalization of each file independently.
     :param data: N-dimension array to normalize
@@ -155,7 +160,8 @@ def File_MeanNormalization(data: np.array) -> np.array:
 
     return np.array(result)
 
-def Global_MeanNormalization(data: np.array) -> np.array:
+
+def global_mean_normalization(data: np.array) -> np.array:
     """
     Perfor a Mean normalization of the whole dataset. The max and min are computed over the complete set of data
     :param data: N-dimension array to normalize
@@ -166,8 +172,6 @@ def Global_MeanNormalization(data: np.array) -> np.array:
     data = data - mean
 
     return data
-
-
 
 
 class StandardScaler(Scaler):
@@ -190,22 +194,25 @@ class StandardScaler(Scaler):
                 raise MethodsDoesNotExist("Only available methods: \"global\" or \"local\"")
 
     def transform(self, m: np.array) -> np.array:
-        if self.methods == "global": return self.__3DTransform(m)
-        elif self.methods == "local": return self.__2DTransform(m)
+        if self.methods == "global":
+            return self.__3d_transform(m)
+
+        elif self.methods == "local":
+            return self.__2d_transform(m)
+
         else:
             raise MethodsDoesNotExist("Only available methods: \"global\" or \"local\"")
-
 
     def fit_transform(self, m: np.array) -> np.array:
         self.fit(m)
         return self.transform(m)
 
-    def __3DTransform(self, m: np.array):
-        if self.mean == []:
+    def __3d_transform(self, m: np.array):
+        if not self.mean:
             raise NotFitYet("Data haven't been fit yet, can't perform scaling")
 
         if len(m.shape) != 3:
-            raise WrongShapeExeception("Matrix should be of dimension 3")
+            raise WrongShapeException("Matrix should be of dimension 3")
 
         results = []
 
@@ -214,17 +221,18 @@ class StandardScaler(Scaler):
 
         return np.array(results)
 
-    def __2DTransform(self, m: np.array):
+    def __2d_transform(self, m: np.array):
         results = []
 
         for d in m:
-            results.append((d - d.mean(axis = 0)) / d.std(axis=0))
+            results.append((d - d.mean(axis=0)) / d.std(axis=0))
 
         return np.array(results)
 
-def File_Standardization(data: np.array) -> np.array:
+
+def file_standardization(data: np.array) -> np.array:
     """
-    Perform a file wise standardiztion
+    Perform a file wise standardization
     :param data: N-dimension array to normalize
     :return: data: N-dimension array locally normalized
     """
@@ -239,7 +247,8 @@ def File_Standardization(data: np.array) -> np.array:
 
     return np.array(result)
 
-def Global_Standardization(data: np.array) -> np.array:
+
+def global_standardization(data: np.array) -> np.array:
     """
     Perform a standardization on the whole dataset
     :param data: N-dimension array to normalize
@@ -272,15 +281,14 @@ class UnitScaler(Scaler):
         self.fit(m)
         return self.transform(m)
 
-def UnitLength(data: np.array, order: int =None) -> np.array:
+
+def unit_length(data: np.array, order: int = None) -> np.array:
     result = []
 
     for d in data:
         result.append(d / np.linalg.norm(d, ord=order, axis=0))
 
     return np.array(result)
-
-
 
 
 class LogScaler(Scaler):
@@ -301,5 +309,3 @@ class LogScaler(Scaler):
     def fit_transform(self, m: np.array) -> np.array:
         self.fit(m)
         return self.transform(m)
-
-

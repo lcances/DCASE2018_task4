@@ -90,7 +90,7 @@ class Encoder:
                 isPredict = pred[i]
 
                 if isPredict == 1:
-                    label += "%s," % DCASE2018.class_correspondance_reverse[i]
+                    label += "%s," % DCASE2018.class_correspondence_reverse[i]
                     nbpredict += 1
 
             if nbpredict > 0:
@@ -425,7 +425,7 @@ class Encoder:
             output.append(labeled)
         return output
 
-    def parse(self, allSegments: list, testFilesName: list) -> str:
+    def parse(self, allSegments: str, testFilesName: list) -> str:
         """ Transform a list of segment into a txt file ready for evaluation.
 
         :param allSegments: a list of dict of 10 key. the list length is equal to the number of file, the dict number
@@ -448,7 +448,7 @@ class Encoder:
                             os.path.basename(testFilesName[clipIndex])[:-4],
                             start * self.frameLength,
                             (start + segment[1]) * self.frameLength,
-                            DCASE2018.class_correspondance_reverse[cls]
+                            DCASE2018.class_correspondence_reverse[cls]
                         )
                         nbSegment += 1
                     start += segment[1]
