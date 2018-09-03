@@ -15,7 +15,7 @@ conda activate dcase
 pip install scikit-learn
 pip install dcase_util
 pip install sed_eval
-pip install tensorflow
+pip install tensorflow-gpu
 pip install keras
 ```
 
