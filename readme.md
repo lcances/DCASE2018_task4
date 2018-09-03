@@ -34,3 +34,8 @@ pip install keras
 conda activate dcase
 python main.py --output_model results/model.name --meta_root path/to/meta/root --features_root path/to/features/root -uid
 ```
+
+
+## Weighted Gate Recurent Unit (WGRU)
+![alt text](img/gru_wgru_combi.png "Representation WGRU vs GRU") ![alt text](img/WGRU.png "Weight injection in Gate Recurrent Unit (GRU)")
+
