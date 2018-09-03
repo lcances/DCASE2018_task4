@@ -37,5 +37,8 @@ python main.py --output_model results/model.name --meta_root path/to/meta/root -
 
 
 ## Weighted Gate Recurent Unit (WGRU)
-![alt text](img/gru_wgru_combi.png "Representation WGRU vs GRU") ![alt text](img/WGRU.png "Weight injection in Gate Recurrent Unit (GRU)")
+To achieve the current score, a Weighted Gate Recurrent Unit (WGRU) was used in parallel with a  classic Gate Recurrent Unit (GRU). The GRU has a good performance when it comes to "stationary" sound localization whereas the WGRU perform better with punctual sounds such as *speech*, *dog*, *alarm bell* and *cat*.
 
+Weight injection in the GRU layer      | Weight impact on localization
+---------------------------------------|---------------------------------------------
+<img src="./img/WGRU.png" width="250"> | <img src="./img/gru_wgru_combi.png" width="250">
