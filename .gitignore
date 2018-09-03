@@ -11,3 +11,4 @@ results/*.tar.xz
 results/submissions/
 results/__pychache__/
 results/testing/
+.ipynb_checkpoints/
