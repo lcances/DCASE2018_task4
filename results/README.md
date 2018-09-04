@@ -23,5 +23,5 @@ independently for each class. the closest it goes to 1, the better it is.
  
 parse_detail.py example output            | parse_metrics.py example output
 ------------------------------------------|---------------------------------------------
-<img src="../img/noNorm.png" width="250"> | <img src="../img/noNorm_metrics.png" width="250">
+<img src="../img/noNorm.png" width="95%"> | <img src="../img/noNorm_metrics.png" width="95%">
 
