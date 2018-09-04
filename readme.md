@@ -40,4 +40,4 @@ To achieve the current score, a Weighted Gate Recurrent Unit (WGRU) was used in 
 
 Weight injection in the GRU layer      | Weight impact on localization
 ---------------------------------------|---------------------------------------------
-<img src="./img/WGRU.png" width="250"> | <img src="./img/gru_wgru_combi.png" width="250">
+<img src="./img/WGRU.png" width="100%"> | <img src="./img/gru_wgru_combi.png" width="90%">
