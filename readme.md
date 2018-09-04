@@ -4,8 +4,7 @@ Based on Convolutional Recurent Neural Network. Tensorflow / Keras
 ## About the BAD challenge
 To get information about the challenge, please visit its
 [Website](http://dcase.community/challenge2018/task-large-scale-weakly-labeled-semi-supervised-sound-event-detection).
-The purpose was to propose a solution to a classification and localization task of a sound event in domestics
- environments. 10 classes describe these events and an audio file can be tagged with multiple class, sometimes
+The purpose was to propose a solution to a classification and localization task of multiple sound events in domestics environments. 10 classes describe these events and an audio file can be tagged with multiple class, sometimes
  overlapping. (weak annotation)
 
 ## Requirements
@@ -15,7 +14,7 @@ conda activate dcase
 pip install scikit-learn
 pip install dcase_util
 pip install sed_eval
-pip install tensorflow
+pip install tensorflow-gpu
 pip install keras
 ```
 
