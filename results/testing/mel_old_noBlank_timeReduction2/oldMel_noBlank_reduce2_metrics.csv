@@ -1,3 +1,0 @@
-epoch,progress,duration
-epoch,progress,loss,binary_accuracy,precision,recall,f1,val_loss,val_binary_accuracy,val_precision,val_recall,val_f1,duration
-1,100,0.0728,0.9750,0.9470,0.8920,0.9177,0.1564,0.9416,0.8696,0.7982,0.831720.3437180519104
